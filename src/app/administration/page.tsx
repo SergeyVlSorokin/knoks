@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { listAccounts } from "@/server/access/accounts";
 import { AccountCreation } from "./account-creation";
+import { AccountManagement } from "./account-management";
 import { WorkspaceHeader } from "../workspace-header";
 
 export default async function AdministrationPage() {
@@ -15,6 +16,9 @@ export default async function AdministrationPage() {
   }
 
   const workspaceAccounts = (await listAccounts(account)) ?? [];
+  const activeAdministratorCount = workspaceAccounts.filter(
+    (item) => item.active && item.role === "administrator",
+  ).length;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -42,15 +46,16 @@ export default async function AdministrationPage() {
             <AccountCreation />
             <div className="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200">
               {workspaceAccounts.map((item) => (
-                <div className="flex items-center justify-between p-4" key={item.id}>
-                  <div>
-                    <p className="font-medium text-slate-900">{item.displayName}</p>
-                    <p className="mt-1 text-sm text-slate-500">@{item.username}</p>
-                  </div>
-                  <p className="text-sm text-slate-600">
-                    {item.role === "administrator" ? "Administrator · includes Member access" : "Member"}
-                  </p>
-                </div>
+                <AccountManagement
+                  key={item.id}
+                  account={item}
+                  isCurrentAccount={item.id === account.accountId}
+                  lastActiveAdministrator={
+                    item.active &&
+                    item.role === "administrator" &&
+                    activeAdministratorCount === 1
+                  }
+                />
               ))}
             </div>
           </article>
