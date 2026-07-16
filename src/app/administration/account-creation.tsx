@@ -23,7 +23,7 @@ export function AccountCreation() {
     <>
       {!creating ? (
         <button
-          className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+          className="mt-4 ml-auto block rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
           onClick={() => setCreating(true)}
           type="button"
         >
