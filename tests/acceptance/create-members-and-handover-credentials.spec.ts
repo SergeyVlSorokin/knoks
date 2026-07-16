@@ -18,6 +18,21 @@ test("Administrator creates a Member who receives credentials once and changes t
   await signIn(page, administrator.username, administrator.password);
 
   await page.getByRole("button", { name: "Create account" }).click();
+  const accountForm = page
+    .locator("form")
+    .filter({ has: page.getByLabel("Display name") });
+  const clientsCard = page
+    .getByRole("article")
+    .filter({ has: page.getByRole("heading", { name: "Clients" }) });
+  const [accountFormBox, clientsCardBox] = await Promise.all([
+    accountForm.boundingBox(),
+    clientsCard.boundingBox(),
+  ]);
+  expect(accountFormBox).not.toBeNull();
+  expect(clientsCardBox).not.toBeNull();
+  expect(accountFormBox!.x + accountFormBox!.width).toBeLessThanOrEqual(
+    clientsCardBox!.x,
+  );
   await page.getByLabel("Display name").fill("  Grace Member  ");
   await page.getByLabel("Username", { exact: true }).fill("grace");
   await page.getByLabel("Role").selectOption("member");

@@ -35,13 +35,11 @@ export default async function AdministrationPage() {
                 <h2 className="text-xl font-semibold text-slate-950">Accounts</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">Members and Administrators who can enter this workspace.</p>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                  {workspaceAccounts.filter((item) => item.active).length} active
-                </span>
-                <AccountCreation />
-              </div>
+              <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                {workspaceAccounts.filter((item) => item.active).length} active
+              </span>
             </div>
+            <AccountCreation />
             <div className="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200">
               {workspaceAccounts.map((item) => (
                 <div className="flex items-center justify-between p-4" key={item.id}>
