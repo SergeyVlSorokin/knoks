@@ -1,0 +1,107 @@
+name: Continuous delivery
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify application
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: consulting_time
+          POSTGRES_USER: consulting_time
+          POSTGRES_PASSWORD: consulting_time
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U consulting_time -d consulting_time"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://consulting_time:consulting_time@127.0.0.1:5432/consulting_time
+    steps:
+      - name: Check out verified commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Enable repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack install
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Apply migrations to disposable PostgreSQL
+        run: pnpm db:migrate
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build production application
+        run: pnpm build
+      - name: Run browser acceptance suite
+        run: pnpm test
+
+  deploy-production:
+    name: Migrate, deploy, and smoke-test production
+    needs: verify
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      github.repository == 'SergeyVlSorokin/knoks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: production-migration-and-deployment
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - name: Check out exact verified commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Enable repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack install
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply production migrations
+        run: pnpm db:migrate
+      - name: Build exact commit for Vercel production
+        run: |
+          pnpm exec vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          pnpm exec vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy unchanged Vercel build
+        run: pnpm exec vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+      - name: Smoke-test public sign-in page
+        run: |
+          test -n "$PRODUCTION_URL"
+          curl --fail --silent --show-error --location \
+            --retry 6 --retry-delay 5 --retry-all-errors \
+            "$PRODUCTION_URL/sign-in" | grep --fixed-strings "Sign in"
