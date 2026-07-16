@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db";
-import { accounts, type AccountRole } from "@/server/db/schema";
+import { accounts, sessions, type AccountRole } from "@/server/db/schema";
 import type { SessionAccount } from ".";
 import { hashPassword, verifyPassword } from "./password";
 
@@ -23,6 +23,17 @@ export type CreateAccountResult =
 export type ChangePasswordResult =
   | { ok: true }
   | { ok: false; reason: "incorrect-password" | "account-unavailable" };
+
+export type ResetAccountPasswordResult =
+  | { ok: true; password: string }
+  | { ok: false; reason: "forbidden" | "account-unavailable" };
+
+export type ManageAccountAccessResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "forbidden" | "account-unavailable" | "last-administrator";
+    };
 
 function isUniqueViolation(error: unknown): boolean {
   let current = error;
@@ -111,4 +122,116 @@ export async function changeOwnPassword(
   return updated.length === 1
     ? { ok: true }
     : { ok: false, reason: "account-unavailable" };
+}
+
+type AccountTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function manageAccountAccess(
+  administrator: SessionAccount,
+  accountId: string,
+  removesAdministratorAccess: boolean,
+  apply: (transaction: AccountTransaction) => Promise<void>,
+): Promise<ManageAccountAccessResult> {
+  if (
+    administrator.role !== "administrator" ||
+    administrator.accountId === accountId
+  ) {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  return db.transaction(async (transaction) => {
+    const activeAdministrators = await transaction
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.active, true), eq(accounts.role, "administrator")))
+      .for("update");
+    if (!activeAdministrators.some(({ id }) => id === administrator.accountId)) {
+      return { ok: false, reason: "forbidden" } as const;
+    }
+
+    const target = await transaction.query.accounts.findFirst({
+      where: and(eq(accounts.id, accountId), eq(accounts.active, true)),
+      columns: { role: true },
+    });
+    if (!target) {
+      return { ok: false, reason: "account-unavailable" } as const;
+    }
+    if (
+      removesAdministratorAccess &&
+      target.role === "administrator" &&
+      activeAdministrators.length === 1
+    ) {
+      return { ok: false, reason: "last-administrator" } as const;
+    }
+
+    await apply(transaction);
+    return { ok: true } as const;
+  });
+}
+
+export async function resetAccountPassword(
+  administrator: SessionAccount,
+  accountId: string,
+): Promise<ResetAccountPasswordResult> {
+  const password = randomBytes(18).toString("base64url");
+  const passwordHash = await hashPassword(password);
+  const result = await manageAccountAccess(
+    administrator,
+    accountId,
+    false,
+    async (transaction) => {
+      await transaction
+        .update(accounts)
+        .set({ passwordHash })
+        .where(and(eq(accounts.id, accountId), eq(accounts.active, true)));
+      await transaction.delete(sessions).where(eq(sessions.accountId, accountId));
+    },
+  );
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason:
+        result.reason === "account-unavailable"
+          ? "account-unavailable"
+          : "forbidden",
+    };
+  }
+  return { ok: true, password };
+}
+
+export async function changeAccountRole(
+  administrator: SessionAccount,
+  accountId: string,
+  role: AccountRole,
+): Promise<ManageAccountAccessResult> {
+  return manageAccountAccess(
+    administrator,
+    accountId,
+    role === "member",
+    async (transaction) => {
+      await transaction
+        .update(accounts)
+        .set({ role })
+        .where(and(eq(accounts.id, accountId), eq(accounts.active, true)));
+    },
+  );
+}
+
+export async function deactivateAccount(
+  administrator: SessionAccount,
+  accountId: string,
+): Promise<ManageAccountAccessResult> {
+  return manageAccountAccess(
+    administrator,
+    accountId,
+    true,
+    async (transaction) => {
+      await transaction
+        .update(accounts)
+        .set({ active: false })
+        .where(and(eq(accounts.id, accountId), eq(accounts.active, true)));
+      await transaction.delete(sessions).where(eq(sessions.accountId, accountId));
+    },
+  );
 }
