@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { currentSessionAccount } from "@/server/access/session-cookie";
+import { listAccounts } from "@/server/access/accounts";
+import { AccountCreation } from "./account-creation";
 import { WorkspaceHeader } from "../workspace-header";
 
 export default async function AdministrationPage() {
@@ -11,6 +13,8 @@ export default async function AdministrationPage() {
   if (account.role !== "administrator") {
     redirect("/my-time");
   }
+
+  const workspaceAccounts = (await listAccounts(account)) ?? [];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -26,16 +30,30 @@ export default async function AdministrationPage() {
 
         <section className="mt-10 grid grid-cols-2 gap-6" aria-label="Administration areas">
           <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-6">
               <div>
                 <h2 className="text-xl font-semibold text-slate-950">Accounts</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">Members and Administrators who can enter this workspace.</p>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">1 active</span>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                  {workspaceAccounts.filter((item) => item.active).length} active
+                </span>
+                <AccountCreation />
+              </div>
             </div>
-            <div className="mt-6 rounded-lg border border-slate-200 p-4">
-              <p className="font-medium text-slate-900">{account.displayName}</p>
-              <p className="mt-1 text-sm text-slate-500">Administrator · includes Member access</p>
+            <div className="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {workspaceAccounts.map((item) => (
+                <div className="flex items-center justify-between p-4" key={item.id}>
+                  <div>
+                    <p className="font-medium text-slate-900">{item.displayName}</p>
+                    <p className="mt-1 text-sm text-slate-500">@{item.username}</p>
+                  </div>
+                  <p className="text-sm text-slate-600">
+                    {item.role === "administrator" ? "Administrator · includes Member access" : "Member"}
+                  </p>
+                </div>
+              ))}
             </div>
           </article>
 
