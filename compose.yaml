@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: consulting_time
+      POSTGRES_USER: consulting_time
+      POSTGRES_PASSWORD: consulting_time
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consulting_time -d consulting_time"]
+      interval: 1s
+      timeout: 5s
+      retries: 20
+    tmpfs:
+      - /var/lib/postgresql/data
