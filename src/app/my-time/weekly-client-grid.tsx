@@ -39,8 +39,9 @@ function formatDuration(minutes: number): string {
 function Summary({ label, value }: { label: string; value: DurationSummary }) {
   return (
     <span aria-label={label} className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-      Billable {formatDuration(value.billableMinutes)} · Non-billable{" "}
-      {formatDuration(value.nonBillableMinutes)} · Total {formatDuration(value.totalMinutes)}
+      <span className="block">Billable {formatDuration(value.billableMinutes)}</span>
+      <span className="block">Non-billable {formatDuration(value.nonBillableMinutes)}</span>
+      <span className="block">Total {formatDuration(value.totalMinutes)}</span>
     </span>
   );
 }
