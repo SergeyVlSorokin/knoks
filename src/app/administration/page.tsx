@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { listAccounts } from "@/server/access/accounts";
+import { listClients } from "@/server/clients";
 import { AccountCreation } from "./account-creation";
 import { AccountManagement } from "./account-management";
+import { ClientManagement } from "./client-management";
 import { WorkspaceHeader } from "../workspace-header";
 
 export default async function AdministrationPage() {
@@ -15,8 +17,13 @@ export default async function AdministrationPage() {
     redirect("/my-time");
   }
 
-  const workspaceAccounts = (await listAccounts(account)) ?? [];
-  const activeAdministratorCount = workspaceAccounts.filter(
+  const [workspaceAccounts, workspaceClients] = await Promise.all([
+    listAccounts(account),
+    listClients(account),
+  ]);
+  const managedAccounts = workspaceAccounts ?? [];
+  const managedClients = workspaceClients ?? [];
+  const activeAdministratorCount = managedAccounts.filter(
     (item) => item.active && item.role === "administrator",
   ).length;
 
@@ -32,20 +39,27 @@ export default async function AdministrationPage() {
           </div>
         </div>
 
+        {managedClients.length === 0 ? (
+          <aside className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-5">
+            <p className="font-semibold text-blue-950">An active Client is required before time can be recorded.</p>
+            <p className="mt-1 text-sm leading-6 text-blue-900">Create the first Client in the ordinary Clients area below. There is no separate setup step.</p>
+          </aside>
+        ) : null}
+
         <section className="mt-10 grid grid-cols-2 gap-6" aria-label="Administration areas">
-          <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <article aria-labelledby="accounts-heading" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-6">
               <div>
-                <h2 className="text-xl font-semibold text-slate-950">Accounts</h2>
+                <h2 className="text-xl font-semibold text-slate-950" id="accounts-heading">Accounts</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">Members and Administrators who can enter this workspace.</p>
               </div>
               <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                {workspaceAccounts.filter((item) => item.active).length} active
+                {managedAccounts.filter((item) => item.active).length} active
               </span>
             </div>
             <AccountCreation />
             <div className="mt-6 divide-y divide-slate-100 rounded-lg border border-slate-200">
-              {workspaceAccounts.map((item) => (
+              {managedAccounts.map((item) => (
                 <AccountManagement
                   key={item.id}
                   account={item}
@@ -60,13 +74,8 @@ export default async function AdministrationPage() {
             </div>
           </article>
 
-          <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-950">Clients</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Clients determine where Members can record their time.</p>
-            <div className="mt-6 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5">
-              <p className="font-medium text-slate-900">No Clients yet</p>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Create an active Client before recording time. This is the normal Clients area, not a setup wizard.</p>
-            </div>
+          <article aria-labelledby="clients-heading" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm" id="clients">
+            <ClientManagement clients={managedClients} />
           </article>
         </section>
       </main>
