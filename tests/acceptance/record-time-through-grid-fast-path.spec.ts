@@ -26,6 +26,23 @@ test("Member records exact time in the weekly grid and keeps spreadsheet travers
   await memberPage.goto("/my-time?week=2099-07-13");
   await addRows(memberPage);
 
+  const emptyContosoMonday = memberPage.getByLabel(
+    "Fast Path Contoso, Monday 2099-07-13",
+  );
+  await emptyContosoMonday.focus();
+  await emptyContosoMonday.press("Tab");
+  await expect(
+    memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14"),
+  ).toBeFocused();
+  await memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14").press("Shift+Tab");
+  await emptyContosoMonday.press("Enter");
+  await expect(
+    memberPage.getByLabel("Fast Path Northwind, Monday 2099-07-13"),
+  ).toBeFocused();
+  await expect(
+    memberPage.getByText("Use a positive duration that resolves to exact whole minutes."),
+  ).toBeHidden();
+
   const contosoMonday = memberPage.getByLabel("Fast Path Contoso, Monday 2099-07-13");
   await contosoMonday.fill("1:30");
   await contosoMonday.press("Enter");

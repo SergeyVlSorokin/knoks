@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import type { DurationSummary } from "@/server/time";
 import {
@@ -80,9 +80,11 @@ function GridCell({
 }) {
   const [state, action, pending] = useActionState(recordGridTimeEntryAction, initialGridEntryState);
   const focusTarget = useRef<string | null>(null);
+  const [errorDismissed, setErrorDismissed] = useState(false);
   const cell = row.cells[date.isoDate];
   const label = `${row.displayName}, ${date.weekday} ${date.isoDate}`;
   const target = `${rowIndex}-${dateIndex}`;
+  const visibleError = errorDismissed ? undefined : state.error;
 
   useEffect(() => {
     if (state.error) {
@@ -140,7 +142,7 @@ function GridCell({
       <input name="clientId" type="hidden" value={row.clientId} />
       <input name="workDate" type="hidden" value={date.isoDate} />
       <input
-        aria-describedby={state.error ? errorId : undefined}
+        aria-describedby={visibleError ? errorId : undefined}
         aria-label={label}
         className="w-full rounded-md border border-slate-300 px-2 py-2 text-center text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
         data-grid-target={target}
@@ -155,21 +157,31 @@ function GridCell({
             | "shift-enter"
             | "tab"
             | "shift-tab";
-          focusTarget.current = nextTarget(
+          const destination = nextTarget(
             rowIndex,
             dateIndex,
             rowCount,
             dateCount,
             direction,
           );
+          focusTarget.current = destination;
+          if (event.currentTarget.value.trim() === "") {
+            focusTarget.current = null;
+            setErrorDismissed(true);
+            document
+              .querySelector<HTMLElement>(`[data-grid-target="${destination}"]`)
+              ?.focus();
+            return;
+          }
+          setErrorDismissed(false);
           event.currentTarget.form?.requestSubmit();
         }}
         placeholder="0:00"
         type="text"
       />
-      {state.error ? (
+      {visibleError ? (
         <span className="text-xs font-medium leading-tight text-red-700" id={errorId}>
-          {state.error}
+          {visibleError}
         </span>
       ) : null}
     </form>
