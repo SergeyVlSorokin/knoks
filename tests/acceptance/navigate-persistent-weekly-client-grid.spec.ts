@@ -1,49 +1,15 @@
 import { expect, test } from "@playwright/test";
-
-const administrator = {
-  username: "ada",
-  password: "correct horse battery staple",
-};
-
-async function signIn(
-  page: import("@playwright/test").Page,
-  username: string,
-  password: string,
-) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Username").fill(username);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-}
-
-async function createMemberAndClients(page: import("@playwright/test").Page) {
-  await signIn(page, administrator.username, administrator.password);
-  await expect(page).toHaveURL(/\/administration$/, { timeout: 15_000 });
-
-  await page.getByRole("button", { name: "Create account" }).click();
-  await page.getByLabel("Display name").fill("Weekly Grid Member");
-  await page.getByLabel("Username", { exact: true }).fill("weekly-grid-member");
-  await page.getByRole("button", { name: "Create Member" }).click();
-  const receipt = page.getByRole("dialog", { name: "Credential receipt" });
-  const password = await receipt.getByTestId("initial-password").textContent();
-  expect(password).toBeTruthy();
-  await receipt.getByRole("button", { name: "Dismiss receipt" }).click();
-
-  const clients = page.getByRole("article", { name: "Clients" });
-  for (const name of ["Northwind", "Contoso"]) {
-    await clients.getByLabel("Client name").fill(name);
-    await clients.getByRole("button", { name: "Create Client" }).click();
-    await expect(clients.getByRole("article", { name: `${name} Client` })).toBeVisible();
-  }
-
-  return password!;
-}
+import { createMemberAndClients, signIn, signInAsAdministrator } from "./support/workspace";
 
 test("Member navigates a Swedish-local week and keeps private standing Client rows", async ({
   browser,
   page,
 }) => {
-  const memberPassword = await createMemberAndClients(page);
+  const memberPassword = await createMemberAndClients(
+    page,
+    { displayName: "Weekly Grid Member", username: "weekly-grid-member" },
+    ["Northwind", "Contoso"],
+  );
 
   const memberContext = await browser.newContext();
   const memberPage = await memberContext.newPage();
@@ -53,7 +19,7 @@ test("Member navigates a Swedish-local week and keeps private standing Client ro
   const grid = memberPage.getByRole("grid", { name: "Weekly time" });
   await expect(grid).toBeVisible();
   await expect(grid.getByRole("columnheader")).toHaveCount(8);
-  await expect(grid.getByRole("row")).toHaveCount(1);
+  await expect(grid.getByRole("row")).toHaveCount(2);
   const currentStockholmDate = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm",
     year: "numeric",
@@ -67,7 +33,7 @@ test("Member navigates a Swedish-local week and keeps private standing Client ro
   await memberPage.getByLabel("Add a standing Client row").selectOption({ label: "Northwind" });
   await memberPage.getByRole("button", { name: "Add row" }).click();
   await expect(grid.getByRole("row", { name: /Northwind/ })).toBeVisible();
-  await expect(grid.getByRole("gridcell")).toHaveCount(7);
+  await expect(grid.getByRole("row", { name: /Northwind/ }).getByRole("gridcell")).toHaveCount(7);
 
   await memberPage.goto("/my-time?week=2026-07-15");
   await expect(grid.getByRole("columnheader", { name: /Monday 2026-07-13/ })).toBeVisible();
@@ -90,9 +56,9 @@ test("Member navigates a Swedish-local week and keeps private standing Client ro
 
   const secondMemberContext = await browser.newContext();
   const secondMemberPage = await secondMemberContext.newPage();
-  await signIn(secondMemberPage, administrator.username, administrator.password);
+  await signInAsAdministrator(secondMemberPage);
   await expect(secondMemberPage).toHaveURL(/\/administration$/, { timeout: 15_000 });
   await secondMemberPage.getByRole("link", { name: "My time" }).click();
-  await expect(secondMemberPage.getByRole("grid", { name: "Weekly time" }).getByRole("row")).toHaveCount(1);
+  await expect(secondMemberPage.getByRole("grid", { name: "Weekly time" }).getByRole("row")).toHaveCount(2);
   await secondMemberContext.close();
 });

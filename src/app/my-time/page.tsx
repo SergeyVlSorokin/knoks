@@ -62,7 +62,9 @@ export default async function MyTimePage({
             <WeeklyClientGrid
               availableClients={weeklyGrid.availableClients}
               dates={weeklyGrid.dates}
+              dateSummaries={weeklyGrid.dateSummaries}
               rows={weeklyGrid.rows}
+              summary={weeklyGrid.summary}
             />
           </>
         ) : (
