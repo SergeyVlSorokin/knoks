@@ -19,6 +19,7 @@
     "test:acceptance": "docker compose up -d --wait && playwright test"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
     "drizzle-orm": "^0.44.5",
     "next": "^15.5.7",
     "postgres": "^3.4.7",
