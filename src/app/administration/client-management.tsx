@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import {
   archiveClientAction,
@@ -52,6 +52,12 @@ function ClientRow({ client }: { client: ClientSummary }) {
   );
   const [deleteState, deleteAction, deletePending] = useActionState(deleteClientAction, initialState);
   const error = renameState.error ?? archiveState.error ?? deleteState.error;
+
+  useEffect(() => {
+    if (renameState.success) {
+      setRenaming(false);
+    }
+  }, [renameState]);
 
   return (
     <article aria-label={`${client.displayName} Client`} className="p-4">

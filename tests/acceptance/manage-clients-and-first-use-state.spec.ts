@@ -57,6 +57,10 @@ test("Administrator manages the Client lifecycle and derived first-use state", a
   await client.getByRole("button", { name: "Save name" }).click();
   const renamedClient = clients.getByRole("article", { name: "Acme Consulting AB Client" });
   await expect(renamedClient).toBeVisible();
+  await expect(
+    renamedClient.getByRole("button", { name: "Save name" }),
+  ).toBeHidden();
+  await expect(renamedClient.getByLabel("Client name")).toBeHidden();
 
   await renamedClient.getByRole("button", { name: "Archive" }).click();
   await expect(renamedClient).toContainText("Archived");
