@@ -21,7 +21,11 @@ import {
   renameClient,
   setClientArchived,
 } from "@/server/clients";
-import { addStandingClientRow, removeStandingClientRow } from "@/server/time";
+import {
+  addStandingClientRow,
+  recordGridTimeEntry,
+  removeStandingClientRow,
+} from "@/server/time";
 import type { SignInState } from "./sign-in/state";
 import type {
   AccountAccessState,
@@ -31,6 +35,7 @@ import type {
 import type { ClientActionState } from "./administration/client-state";
 import type { ChangePasswordState } from "./profile/state";
 import type { StandingRowState } from "./my-time/standing-row-state";
+import type { GridEntryState } from "./my-time/grid-entry-state";
 import type { SignOutState } from "./sign-out-state";
 
 const credentialsSchema = z.object({
@@ -65,6 +70,12 @@ const renamedClientSchema = managedClientSchema.extend(clientNameSchema.shape);
 
 const standingClientSchema = z.object({
   clientId: z.string().uuid(),
+});
+
+const gridEntrySchema = z.object({
+  clientId: z.string().uuid(),
+  workDate: z.string(),
+  duration: z.string().max(32),
 });
 
 const passwordChangeSchema = z.object({
@@ -493,4 +504,52 @@ export async function removeStandingRowAction(
   formData: FormData,
 ): Promise<StandingRowState> {
   return changeStandingRow(formData, removeStandingClientRow);
+}
+
+export async function recordGridTimeEntryAction(
+  _previousState: GridEntryState,
+  formData: FormData,
+): Promise<GridEntryState> {
+  const attemptedInput = String(formData.get("duration") ?? "");
+  const input = gridEntrySchema.safeParse({
+    clientId: formData.get("clientId"),
+    workDate: formData.get("workDate"),
+    duration: attemptedInput,
+  });
+  if (!input.success) {
+    return {
+      error: "Use a positive duration that resolves to exact whole minutes.",
+      attemptedInput,
+    };
+  }
+
+  const member = await currentSessionAccount();
+  if (!member) {
+    return { error: "Sign in again to record time.", attemptedInput };
+  }
+
+  const result = await recordGridTimeEntry(
+    member,
+    input.data.clientId,
+    input.data.workDate,
+    input.data.duration,
+  );
+  if (!result.ok) {
+    const error =
+      result.reason === "invalid-duration"
+        ? "Use a positive duration that resolves to exact whole minutes."
+        : result.reason === "daily-limit"
+          ? "A Member cannot record more than 24 hours on one date."
+          : result.reason === "client-unavailable"
+            ? "That Client is no longer active."
+            : result.reason === "member-unavailable"
+              ? "Sign in again to record time."
+              : result.reason === "invalid-date"
+                ? "That work date is invalid."
+                : "Time changed concurrently. Try again.";
+    return { error, attemptedInput };
+  }
+
+  revalidatePath("/my-time");
+  return { committed: true };
 }

@@ -1,22 +1,188 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 
-import { addStandingRowAction, removeStandingRowAction } from "../actions";
+import type { DurationSummary } from "@/server/time";
+import {
+  addStandingRowAction,
+  recordGridTimeEntryAction,
+  removeStandingRowAction,
+} from "../actions";
+import { initialGridEntryState } from "./grid-entry-state";
 import { initialStandingRowState } from "./standing-row-state";
+
+interface GridRow {
+  clientId: string;
+  displayName: string;
+  archived: boolean;
+  standing: boolean;
+  cells: Record<string, DurationSummary>;
+  summary: DurationSummary;
+}
 
 interface WeeklyClientGridProps {
   dates: Array<{ isoDate: string; weekday: string }>;
-  rows: Array<{
-    clientId: string;
-    displayName: string;
-    archived: boolean;
-    standing: boolean;
-  }>;
+  rows: GridRow[];
+  dateSummaries: Record<string, DurationSummary>;
+  summary: DurationSummary;
   availableClients: Array<{ clientId: string; displayName: string }>;
 }
 
-export function WeeklyClientGrid({ dates, rows, availableClients }: WeeklyClientGridProps) {
+function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes}m`;
+  if (remainingMinutes === 0) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+function Summary({ label, value }: { label: string; value: DurationSummary }) {
+  return (
+    <span aria-label={label} className="mt-2 block text-xs font-normal leading-5 text-slate-600">
+      Billable {formatDuration(value.billableMinutes)} · Non-billable{" "}
+      {formatDuration(value.nonBillableMinutes)} · Total {formatDuration(value.totalMinutes)}
+    </span>
+  );
+}
+
+function nextTarget(
+  rowIndex: number,
+  dateIndex: number,
+  rowCount: number,
+  dateCount: number,
+  direction: "enter" | "shift-enter" | "tab" | "shift-tab",
+): string {
+  const total = rowCount * dateCount;
+  const columnMajor = dateIndex * rowCount + rowIndex;
+  const rowMajor = rowIndex * dateCount + dateIndex;
+  const offset = direction.startsWith("shift") ? -1 : 1;
+  const current = direction.endsWith("enter") ? columnMajor : rowMajor;
+  const next = (current + offset + total) % total;
+  const nextRow = direction.endsWith("enter") ? next % rowCount : Math.floor(next / dateCount);
+  const nextDate = direction.endsWith("enter") ? Math.floor(next / rowCount) : next % dateCount;
+  return `${nextRow}-${nextDate}`;
+}
+
+function GridCell({
+  row,
+  date,
+  rowIndex,
+  dateIndex,
+  rowCount,
+  dateCount,
+}: {
+  row: GridRow;
+  date: { isoDate: string; weekday: string };
+  rowIndex: number;
+  dateIndex: number;
+  rowCount: number;
+  dateCount: number;
+}) {
+  const [state, action, pending] = useActionState(recordGridTimeEntryAction, initialGridEntryState);
+  const focusTarget = useRef<string | null>(null);
+  const cell = row.cells[date.isoDate];
+  const label = `${row.displayName}, ${date.weekday} ${date.isoDate}`;
+  const target = `${rowIndex}-${dateIndex}`;
+
+  useEffect(() => {
+    if (state.error) {
+      document.querySelector<HTMLElement>(`[data-grid-target="${target}"]`)?.focus();
+      return;
+    }
+    if (!state.committed || !focusTarget.current) return;
+    const next = document.querySelector<HTMLElement>(
+      `[data-grid-target="${focusTarget.current}"]`,
+    );
+    focusTarget.current = null;
+    next?.focus();
+  }, [state, target]);
+
+  if (cell?.totalMinutes) {
+    const mixed = cell.billableMinutes > 0 && cell.nonBillableMinutes > 0;
+    return (
+      <button
+        aria-label={label}
+        className="h-full w-full rounded-md px-2 py-2 text-left hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        data-grid-target={target}
+        type="button"
+      >
+        <span className="block font-semibold text-slate-950">{formatDuration(cell.totalMinutes)}</span>
+        {mixed ? (
+          <span className="mt-1 block text-xs text-slate-600">
+            Billable {formatDuration(cell.billableMinutes)} · Non-billable{" "}
+            {formatDuration(cell.nonBillableMinutes)}
+          </span>
+        ) : (
+          <span className="mt-1 block text-xs font-semibold text-blue-700">
+            {cell.billableMinutes > 0 ? "Billable" : "Non-billable"}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  if (row.archived) {
+    return (
+      <button
+        aria-label={label}
+        className="h-full w-full rounded-md text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        data-grid-target={target}
+        type="button"
+      >
+        —
+      </button>
+    );
+  }
+
+  const errorId = `grid-error-${row.clientId}-${date.isoDate}`;
+  return (
+    <form action={action} className="grid h-full content-center gap-1">
+      <input name="clientId" type="hidden" value={row.clientId} />
+      <input name="workDate" type="hidden" value={date.isoDate} />
+      <input
+        aria-describedby={state.error ? errorId : undefined}
+        aria-label={label}
+        className="w-full rounded-md border border-slate-300 px-2 py-2 text-center text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        data-grid-target={target}
+        defaultValue={state.attemptedInput ?? ""}
+        disabled={pending}
+        name="duration"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== "Tab") return;
+          event.preventDefault();
+          const direction = `${event.shiftKey ? "shift-" : ""}${event.key.toLowerCase()}` as
+            | "enter"
+            | "shift-enter"
+            | "tab"
+            | "shift-tab";
+          focusTarget.current = nextTarget(
+            rowIndex,
+            dateIndex,
+            rowCount,
+            dateCount,
+            direction,
+          );
+          event.currentTarget.form?.requestSubmit();
+        }}
+        placeholder="0:00"
+        type="text"
+      />
+      {state.error ? (
+        <span className="text-xs font-medium leading-tight text-red-700" id={errorId}>
+          {state.error}
+        </span>
+      ) : null}
+    </form>
+  );
+}
+
+export function WeeklyClientGrid({
+  dates,
+  rows,
+  dateSummaries,
+  summary,
+  availableClients,
+}: WeeklyClientGridProps) {
   const [addState, addAction, addPending] = useActionState(
     addStandingRowAction,
     initialStandingRowState,
@@ -81,7 +247,7 @@ export function WeeklyClientGrid({ dates, rows, availableClients }: WeeklyClient
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {rows.map((row, rowIndex) => (
               <tr aria-label={row.displayName} key={row.clientId}>
                 <th className="border-r border-t border-slate-200 px-4 py-3 text-left" scope="row">
                   <span className="font-semibold text-slate-950">{row.displayName}</span>
@@ -90,6 +256,7 @@ export function WeeklyClientGrid({ dates, rows, availableClients }: WeeklyClient
                       Archived
                     </span>
                   ) : null}
+                  <Summary label={`${row.displayName} week summary`} value={row.summary} />
                   {row.standing ? (
                     <form action={removeAction} className="mt-2">
                       <input name="clientId" type="hidden" value={row.clientId} />
@@ -103,16 +270,34 @@ export function WeeklyClientGrid({ dates, rows, availableClients }: WeeklyClient
                     </form>
                   ) : null}
                 </th>
-                {dates.map((date) => (
-                  <td
-                    aria-label={`${row.displayName}, ${date.weekday} ${date.isoDate}`}
-                    className="h-20 border-t border-slate-200 bg-white px-3 py-2"
-                    key={date.isoDate}
-                  />
+                {dates.map((date, dateIndex) => (
+                  <td className="h-24 border-t border-slate-200 bg-white px-2 py-2" key={date.isoDate}>
+                    <GridCell
+                      date={date}
+                      dateCount={dates.length}
+                      dateIndex={dateIndex}
+                      row={row}
+                      rowCount={rows.length}
+                      rowIndex={rowIndex}
+                    />
+                  </td>
                 ))}
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="bg-slate-50">
+              <th className="border-r border-t border-slate-200 px-4 py-3 text-left text-sm font-semibold">
+                Week totals
+                <Summary label="Whole week summary" value={summary} />
+              </th>
+              {dates.map((date) => (
+                <td className="border-t border-slate-200 px-3 py-3 text-center" key={date.isoDate}>
+                  <Summary label={`${date.weekday} ${date.isoDate} summary`} value={dateSummaries[date.isoDate]!} />
+                </td>
+              ))}
+            </tr>
+          </tfoot>
         </table>
       </div>
     </section>
