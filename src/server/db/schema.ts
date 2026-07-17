@@ -1,9 +1,11 @@
 import {
   boolean,
   check,
+  date,
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -13,6 +15,11 @@ import { sql } from "drizzle-orm";
 
 export const accountRole = pgEnum("account_role", ["member", "administrator"]);
 export type AccountRole = (typeof accountRole.enumValues)[number];
+
+export const timeEntryClassification = pgEnum("time_entry_classification", [
+  "billable",
+  "non_billable",
+]);
 
 export const companyWorkspace = pgTable(
   "company_workspace",
@@ -48,6 +55,36 @@ export const clients = pgTable(
     uniqueIndex("client_display_name_case_insensitive").on(sql`lower(${table.displayName})`),
   ],
 );
+
+export const standingClientRows = pgTable(
+  "standing_client_row",
+  {
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.clientId] })],
+);
+
+export const timeEntries = pgTable("time_entry", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id),
+  workDate: date("work_date").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  description: text("description"),
+  classification: timeEntryClassification("classification").notNull(),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const sessions = pgTable("session", {
   tokenHash: text("token_hash").primaryKey(),

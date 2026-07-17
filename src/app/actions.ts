@@ -21,6 +21,7 @@ import {
   renameClient,
   setClientArchived,
 } from "@/server/clients";
+import { addStandingClientRow, removeStandingClientRow } from "@/server/time";
 import type { SignInState } from "./sign-in/state";
 import type {
   AccountAccessState,
@@ -29,6 +30,7 @@ import type {
 } from "./administration/account-state";
 import type { ClientActionState } from "./administration/client-state";
 import type { ChangePasswordState } from "./profile/state";
+import type { StandingRowState } from "./my-time/standing-row-state";
 import type { SignOutState } from "./sign-out-state";
 
 const credentialsSchema = z.object({
@@ -60,6 +62,10 @@ const managedClientSchema = z.object({
 });
 
 const renamedClientSchema = managedClientSchema.extend(clientNameSchema.shape);
+
+const standingClientSchema = z.object({
+  clientId: z.string().uuid(),
+});
 
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),
@@ -444,4 +450,47 @@ export async function changePasswordAction(
   }
 
   return { success: "Password changed." };
+}
+
+async function changeStandingRow(
+  formData: FormData,
+  change: typeof addStandingClientRow,
+): Promise<StandingRowState> {
+  const input = standingClientSchema.safeParse({ clientId: formData.get("clientId") });
+  if (!input.success) {
+    return { error: "Select an active Client." };
+  }
+
+  const member = await currentSessionAccount();
+  if (!member) {
+    return { error: "Sign in again to change your weekly grid." };
+  }
+
+  const result = await change(member, input.data.clientId);
+  if (!result.ok) {
+    const error =
+      result.reason === "account-unavailable"
+        ? "Sign in again to change your weekly grid."
+        : result.reason === "client-unavailable"
+          ? "That Client is no longer active."
+          : "The weekly grid changed. Reload and try again.";
+    return { error };
+  }
+
+  revalidatePath("/my-time");
+  return {};
+}
+
+export async function addStandingRowAction(
+  _previousState: StandingRowState,
+  formData: FormData,
+): Promise<StandingRowState> {
+  return changeStandingRow(formData, addStandingClientRow);
+}
+
+export async function removeStandingRowAction(
+  _previousState: StandingRowState,
+  formData: FormData,
+): Promise<StandingRowState> {
+  return changeStandingRow(formData, removeStandingClientRow);
 }
