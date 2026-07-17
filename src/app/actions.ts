@@ -15,12 +15,19 @@ import {
 } from "@/server/access/accounts";
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { sessionCookieName } from "@/server/access/session-cookie";
+import {
+  createClient,
+  deleteClient,
+  renameClient,
+  setClientArchived,
+} from "@/server/clients";
 import type { SignInState } from "./sign-in/state";
 import type {
   AccountAccessState,
   CreateAccountState,
   ManageAccountState,
 } from "./administration/account-state";
+import type { ClientActionState } from "./administration/client-state";
 import type { ChangePasswordState } from "./profile/state";
 import type { SignOutState } from "./sign-out-state";
 
@@ -42,6 +49,17 @@ const managedAccountSchema = z.object({
 const accountRoleChangeSchema = managedAccountSchema.extend({
   role: z.enum(["member", "administrator"]),
 });
+
+const clientNameSchema = z.object({
+  displayName: z.string().trim().min(1),
+});
+
+const managedClientSchema = z.object({
+  clientId: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+});
+
+const renamedClientSchema = managedClientSchema.extend(clientNameSchema.shape);
 
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),
@@ -233,6 +251,161 @@ export async function deactivateAccountAction(
 
   revalidatePath("/administration");
   return { success: "Account permanently deactivated." };
+}
+
+function revalidateClientViews() {
+  revalidatePath("/administration");
+  revalidatePath("/my-time");
+}
+
+function clientError(
+  reason: "forbidden" | "name-taken" | "reload",
+): string {
+  switch (reason) {
+    case "forbidden":
+      return "Only Administrators can manage Clients.";
+    case "name-taken":
+      return "That Client name is already in use.";
+    case "reload":
+      return "The Client changed. Reload and try again.";
+  }
+}
+
+export async function createClientAction(
+  _previousState: ClientActionState,
+  formData: FormData,
+): Promise<ClientActionState> {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const input = clientNameSchema.safeParse({
+    displayName: formData.get("displayName"),
+  });
+  if (!input.success) {
+    return { error: "Enter a Client name." };
+  }
+
+  const result = await createClient(administrator, input.data.displayName);
+  if (!result.ok) {
+    return { error: clientError(result.reason) };
+  }
+
+  revalidateClientViews();
+  return { success: "Client created." };
+}
+
+export async function renameClientAction(
+  _previousState: ClientActionState,
+  formData: FormData,
+): Promise<ClientActionState> {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const input = renamedClientSchema.safeParse({
+    clientId: formData.get("clientId"),
+    version: formData.get("version"),
+    displayName: formData.get("displayName"),
+  });
+  if (!input.success) {
+    return { error: "Enter a Client name." };
+  }
+
+  const result = await renameClient(
+    administrator,
+    input.data.clientId,
+    input.data.version,
+    input.data.displayName,
+  );
+  if (!result.ok) {
+    return { error: clientError(result.reason) };
+  }
+
+  revalidateClientViews();
+  return { success: "Client renamed." };
+}
+
+async function changeClientArchiveState(
+  formData: FormData,
+  archived: boolean,
+): Promise<ClientActionState> {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const input = managedClientSchema.safeParse({
+    clientId: formData.get("clientId"),
+    version: formData.get("version"),
+  });
+  if (!input.success) {
+    return { error: "The Client changed. Reload and try again." };
+  }
+
+  const result = await setClientArchived(
+    administrator,
+    input.data.clientId,
+    input.data.version,
+    archived,
+  );
+  if (!result.ok) {
+    return { error: clientError(result.reason) };
+  }
+
+  revalidateClientViews();
+  return { success: archived ? "Client archived." : "Client restored." };
+}
+
+export async function archiveClientAction(
+  _previousState: ClientActionState,
+  formData: FormData,
+): Promise<ClientActionState> {
+  return changeClientArchiveState(formData, true);
+}
+
+export async function restoreClientAction(
+  _previousState: ClientActionState,
+  formData: FormData,
+): Promise<ClientActionState> {
+  return changeClientArchiveState(formData, false);
+}
+
+export async function deleteClientAction(
+  _previousState: ClientActionState,
+  formData: FormData,
+): Promise<ClientActionState> {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const input = managedClientSchema.safeParse({
+    clientId: formData.get("clientId"),
+    version: formData.get("version"),
+  });
+  if (!input.success) {
+    return { error: "The Client changed. Reload and try again." };
+  }
+
+  const result = await deleteClient(
+    administrator,
+    input.data.clientId,
+    input.data.version,
+  );
+  if (!result.ok) {
+    return {
+      error:
+        result.reason === "client-referenced"
+          ? "A Client with recorded time cannot be permanently deleted. Archive it instead."
+          : clientError(result.reason),
+    };
+  }
+
+  revalidateClientViews();
+  return { success: "Client permanently deleted." };
 }
 
 export async function changePasswordAction(

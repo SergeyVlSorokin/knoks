@@ -8,6 +8,20 @@
       "when": 1784204650221,
       "tag": "0000_lumpy_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784294674825,
+      "tag": "0001_ordinary_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784295149943,
+      "tag": "0002_smiling_starbolt",
+      "breakpoints": true
     }
   ]
 }

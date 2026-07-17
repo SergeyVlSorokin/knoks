@@ -20,7 +20,7 @@ export default async function globalSetup() {
   });
   const client = postgres(env.DATABASE_URL, { max: 1 });
   try {
-    await client`truncate table session, account, company_workspace cascade`;
+    await client`truncate table session, account, client, company_workspace cascade`;
   } finally {
     await client.end();
   }
