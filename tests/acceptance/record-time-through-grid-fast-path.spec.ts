@@ -27,39 +27,39 @@ test("Member records exact time in the weekly grid and keeps spreadsheet travers
   await addRows(memberPage);
 
   const emptyContosoMonday = memberPage.getByLabel(
-    "Fast Path Contoso, Monday 2099-07-13",
+    "Fast Path Contoso, Mon 2099-07-13",
   );
   await emptyContosoMonday.focus();
   await emptyContosoMonday.press("Tab");
   await expect(
-    memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14"),
+    memberPage.getByLabel("Fast Path Contoso, Tue 2099-07-14"),
   ).toBeFocused();
-  await memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14").press("Shift+Tab");
+  await memberPage.getByLabel("Fast Path Contoso, Tue 2099-07-14").press("Shift+Tab");
   await emptyContosoMonday.press("Enter");
   await expect(
-    memberPage.getByLabel("Fast Path Northwind, Monday 2099-07-13"),
+    memberPage.getByLabel("Fast Path Northwind, Mon 2099-07-13"),
   ).toBeFocused();
   await expect(
     memberPage.getByText("Use a positive duration that resolves to exact whole minutes."),
   ).toBeHidden();
 
-  const contosoMonday = memberPage.getByLabel("Fast Path Contoso, Monday 2099-07-13");
+  const contosoMonday = memberPage.getByLabel("Fast Path Contoso, Mon 2099-07-13");
   await contosoMonday.fill("1:30");
   await contosoMonday.press("Enter");
-  await expect(contosoMonday).toHaveText(/1h 30m.*Billable/);
-  await expect(memberPage.getByLabel("Fast Path Northwind, Monday 2099-07-13")).toBeFocused();
+  await expect(contosoMonday).toHaveText(/1:30.*B/);
+  await expect(memberPage.getByLabel("Fast Path Northwind, Mon 2099-07-13")).toBeFocused();
 
-  const northwindMonday = memberPage.getByLabel("Fast Path Northwind, Monday 2099-07-13");
+  const northwindMonday = memberPage.getByLabel("Fast Path Northwind, Mon 2099-07-13");
   await northwindMonday.fill("0:30");
   await northwindMonday.press("Tab");
-  await expect(memberPage.getByLabel("Fast Path Northwind, Tuesday 2099-07-14")).toBeFocused();
+  await expect(memberPage.getByLabel("Fast Path Northwind, Tue 2099-07-14")).toBeFocused();
 
-  const northwindTuesday = memberPage.getByLabel("Fast Path Northwind, Tuesday 2099-07-14");
+  const northwindTuesday = memberPage.getByLabel("Fast Path Northwind, Tue 2099-07-14");
   await northwindTuesday.fill("1,5");
   await northwindTuesday.press("Shift+Enter");
-  await expect(memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14")).toBeFocused();
+  await expect(memberPage.getByLabel("Fast Path Contoso, Tue 2099-07-14")).toBeFocused();
 
-  const invalid = memberPage.getByLabel("Fast Path Contoso, Tuesday 2099-07-14");
+  const invalid = memberPage.getByLabel("Fast Path Contoso, Tue 2099-07-14");
   await invalid.fill("1,333");
   await invalid.press("Tab");
   await expect(invalid).toHaveValue("1,333");
@@ -78,13 +78,13 @@ test("Member records exact time in the weekly grid and keeps spreadsheet travers
   await expect(contosoMonday).toBeFocused();
 
   await expect(memberPage.getByLabel("Fast Path Northwind week summary")).toHaveText(
-    /Billable 2h.*Non-billable 0m.*Total 2h/,
+    /2:00.*0:00.*2:00/,
   );
-  await expect(memberPage.getByLabel("Monday 2099-07-13 summary")).toHaveText(
-    /Billable 2h.*Non-billable 0m.*Total 2h/,
+  await expect(memberPage.getByLabel("Mon 2099-07-13 summary")).toHaveText(
+    /2:00.*0:00.*2:00/,
   );
   await expect(memberPage.getByLabel("Whole week summary")).toHaveText(
-    /Billable 4h.*Non-billable 0m.*Total 4h/,
+    /4:00.*0:00.*4:00/,
   );
 
   const secondContext = await browser.newContext();
@@ -93,17 +93,17 @@ test("Member records exact time in the weekly grid and keeps spreadsheet travers
   await expect(secondPage).toHaveURL(/\/my-time$/, { timeout: 15_000 });
   await secondPage.goto("/my-time?week=2099-07-13");
 
-  const firstDuplicate = memberPage.getByLabel("Fast Path Northwind, Sunday 2099-07-19");
-  const secondDuplicate = secondPage.getByLabel("Fast Path Northwind, Sunday 2099-07-19");
+  const firstDuplicate = memberPage.getByLabel("Fast Path Northwind, Sun 2099-07-19");
+  const secondDuplicate = secondPage.getByLabel("Fast Path Northwind, Sun 2099-07-19");
   await firstDuplicate.fill("1:00");
   await secondDuplicate.fill("1:00");
   await firstDuplicate.press("Enter");
-  await expect(firstDuplicate).toHaveText(/1h.*Billable/);
+  await expect(firstDuplicate).toHaveText(/1:00.*B/);
   await secondDuplicate.press("Enter");
-  await expect(secondDuplicate).toHaveText(/2h.*Billable/);
+  await expect(secondDuplicate).toHaveText(/2:00.*B/);
   await memberPage.reload();
-  await expect(memberPage.getByLabel("Fast Path Northwind, Sunday 2099-07-19")).toHaveText(
-    /2h.*Billable/,
+  await expect(memberPage.getByLabel("Fast Path Northwind, Sun 2099-07-19")).toHaveText(
+    /2:00.*B/,
   );
 
   await secondContext.close();
