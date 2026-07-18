@@ -257,7 +257,14 @@ export function WeeklyClientGrid({
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table aria-label="Weekly time" className="w-full min-w-[960px] border-collapse" role="grid">
+        <table aria-label="Weekly time" className="w-full min-w-[960px] table-fixed border-collapse" role="grid">
+          <colgroup>
+            <col className="w-56" />
+            {dates.map((date) => (
+              <col className="w-28" key={date.isoDate} />
+            ))}
+            <col className="w-28" />
+          </colgroup>
           <thead>
             <tr>
               <th className="w-56 border-b border-r border-slate-200 bg-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-900">

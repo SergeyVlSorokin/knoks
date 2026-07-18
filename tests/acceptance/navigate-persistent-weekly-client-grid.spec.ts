@@ -19,6 +19,12 @@ test("Member navigates a Swedish-local week and keeps private standing Client ro
   const grid = memberPage.getByRole("grid", { name: "Weekly time" });
   await expect(grid).toBeVisible();
   await expect(grid.getByRole("columnheader")).toHaveCount(9);
+  const dayWidths = await grid
+    .getByRole("columnheader")
+    .evaluateAll((headers) =>
+      headers.slice(1, 8).map((header) => Math.round(header.getBoundingClientRect().width)),
+    );
+  expect(Math.max(...dayWidths) - Math.min(...dayWidths)).toBeLessThanOrEqual(1);
   await expect(grid.getByRole("row")).toHaveCount(2);
   const currentStockholmDate = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm",
