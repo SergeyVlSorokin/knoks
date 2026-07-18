@@ -31,19 +31,31 @@ interface WeeklyClientGridProps {
 function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${remainingMinutes}m`;
-  if (remainingMinutes === 0) return `${hours}h`;
-  return `${hours}h ${remainingMinutes}m`;
+  return `${hours}:${remainingMinutes.toString().padStart(2, "0")}`;
 }
 
 function Summary({ label, value }: { label: string; value: DurationSummary }) {
   return (
-    <span aria-label={label} className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-      <span className="block">Billable {formatDuration(value.billableMinutes)}</span>
-      <span className="block">Non-billable {formatDuration(value.nonBillableMinutes)}</span>
-      <span className="block">Total {formatDuration(value.totalMinutes)}</span>
+    <span aria-label={label} className="block text-right text-xs font-normal leading-5 tabular-nums text-slate-600">
+      <span className="block">{formatDuration(value.billableMinutes)}</span>
+      <span className="block">{formatDuration(value.nonBillableMinutes)}</span>
+      <span className="block font-semibold text-slate-800">{formatDuration(value.totalMinutes)}</span>
     </span>
   );
+}
+
+function SummaryLabels() {
+  return (
+    <span aria-label="Billable, non-billable, total" className="block text-xs font-normal leading-5 text-slate-600">
+      <span className="block">Billable</span>
+      <span className="block">Non-billable</span>
+      <span className="block font-semibold text-slate-800">Total</span>
+    </span>
+  );
+}
+
+function shortDate(isoDate: string): string {
+  return isoDate.slice(5);
 }
 
 function nextTarget(
@@ -102,22 +114,29 @@ function GridCell({
 
   if (cell?.totalMinutes) {
     const mixed = cell.billableMinutes > 0 && cell.nonBillableMinutes > 0;
+    const classificationLabel = mixed
+      ? "Mixed Billable and Non-billable"
+      : cell.billableMinutes > 0
+        ? "Billable"
+        : "Non-billable";
     return (
       <button
-        aria-label={label}
-        className="h-full w-full rounded-md px-2 py-2 text-left hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        aria-label={`${label}, ${classificationLabel}`}
+        className="flex h-full w-full flex-col items-end justify-center rounded-md px-2 py-1 text-right hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
         data-grid-target={target}
+        title={classificationLabel}
         type="button"
       >
-        <span className="block font-semibold text-slate-950">{formatDuration(cell.totalMinutes)}</span>
+        <span className="block font-semibold tabular-nums text-slate-950">
+          {formatDuration(cell.totalMinutes)}
+        </span>
         {mixed ? (
-          <span className="mt-1 block text-xs text-slate-600">
-            Billable {formatDuration(cell.billableMinutes)} · Non-billable{" "}
-            {formatDuration(cell.nonBillableMinutes)}
+          <span className="mt-1 block text-xs tabular-nums text-slate-600">
+            B {formatDuration(cell.billableMinutes)} · NB {formatDuration(cell.nonBillableMinutes)}
           </span>
         ) : (
           <span className="mt-1 block text-xs font-semibold text-blue-700">
-            {cell.billableMinutes > 0 ? "Billable" : "Non-billable"}
+            {cell.billableMinutes > 0 ? "B" : "NB"}
           </span>
         )}
       </button>
@@ -128,7 +147,7 @@ function GridCell({
     return (
       <button
         aria-label={label}
-        className="h-full w-full rounded-md text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        className="h-full w-full rounded-md text-right text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600"
         data-grid-target={target}
         type="button"
       >
@@ -145,7 +164,7 @@ function GridCell({
       <input
         aria-describedby={visibleError ? errorId : undefined}
         aria-label={label}
-        className="w-full rounded-md border border-slate-300 px-2 py-2 text-center text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="w-full rounded-md border border-slate-300 px-2 py-1 text-right text-sm tabular-nums focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
         data-grid-target={target}
         defaultValue={state.attemptedInput ?? ""}
         disabled={pending}
@@ -169,9 +188,7 @@ function GridCell({
           if (event.currentTarget.value.trim() === "") {
             focusTarget.current = null;
             setErrorDismissed(true);
-            document
-              .querySelector<HTMLElement>(`[data-grid-target="${destination}"]`)
-              ?.focus();
+            document.querySelector<HTMLElement>(`[data-grid-target="${destination}"]`)?.focus();
             return;
           }
           setErrorDismissed(false);
@@ -244,7 +261,10 @@ export function WeeklyClientGrid({
           <thead>
             <tr>
               <th className="w-56 border-b border-r border-slate-200 bg-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-900">
-                Client
+                <span className="block">Client</span>
+                <span className="mt-1 block text-[10px] font-normal text-slate-500">
+                  B Billable · NB Non-billable
+                </span>
               </th>
               {dates.map((date) => (
                 <th
@@ -252,26 +272,28 @@ export function WeeklyClientGrid({
                   key={date.isoDate}
                 >
                   <span className="block">{date.weekday}</span>
-                  <time className="mt-1 block font-normal text-slate-600" dateTime={date.isoDate}>
-                    {date.isoDate}
+                  <time className="mt-1 block font-normal tabular-nums text-slate-600" dateTime={date.isoDate}>
+                    {shortDate(date.isoDate)}
                   </time>
                 </th>
               ))}
+              <th className="border-b border-l border-slate-200 bg-slate-100 px-3 py-3 text-right text-sm font-semibold text-slate-900">
+                Week
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, rowIndex) => (
               <tr aria-label={row.displayName} key={row.clientId}>
-                <th className="border-r border-t border-slate-200 px-4 py-3 text-left" scope="row">
+                <th className="border-r border-t border-slate-200 px-4 py-2 text-left" scope="row">
                   <span className="font-semibold text-slate-950">{row.displayName}</span>
                   {row.archived ? (
                     <span className="ml-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                       Archived
                     </span>
                   ) : null}
-                  <Summary label={`${row.displayName} week summary`} value={row.summary} />
                   {row.standing ? (
-                    <form action={removeAction} className="mt-2">
+                    <form action={removeAction} className="mt-1">
                       <input name="clientId" type="hidden" value={row.clientId} />
                       <button
                         className="text-xs font-semibold text-blue-700 disabled:opacity-50"
@@ -284,31 +306,39 @@ export function WeeklyClientGrid({
                   ) : null}
                 </th>
                 {dates.map((date, dateIndex) => (
-                  <td className="h-24 border-t border-slate-200 bg-white px-2 py-2" key={date.isoDate}>
+                  <td className="h-20 border-t border-slate-200 bg-white px-2 py-1" key={date.isoDate}>
                     <GridCell
-                      date={date}
                       dateCount={dates.length}
                       dateIndex={dateIndex}
                       row={row}
+                      date={date}
                       rowCount={rows.length}
                       rowIndex={rowIndex}
                     />
                   </td>
                 ))}
+                <td className="border-l border-t border-slate-200 bg-white px-3 py-2">
+                  <Summary label={`${row.displayName} week summary`} value={row.summary} />
+                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-slate-50">
-              <th className="border-r border-t border-slate-200 px-4 py-3 text-left text-sm font-semibold">
-                Week totals
-                <Summary label="Whole week summary" value={summary} />
+              <th className="border-r border-t border-slate-200 px-4 py-2 text-left" scope="row">
+                <SummaryLabels />
               </th>
               {dates.map((date) => (
-                <td className="border-t border-slate-200 px-3 py-3 text-center" key={date.isoDate}>
-                  <Summary label={`${date.weekday} ${date.isoDate} summary`} value={dateSummaries[date.isoDate]!} />
+                <td className="border-t border-slate-200 px-3 py-2" key={date.isoDate}>
+                  <Summary
+                    label={`${date.weekday} ${date.isoDate} summary`}
+                    value={dateSummaries[date.isoDate]!}
+                  />
                 </td>
               ))}
+              <td className="border-l border-t border-slate-200 px-3 py-2">
+                <Summary label="Whole week summary" value={summary} />
+              </td>
             </tr>
           </tfoot>
         </table>

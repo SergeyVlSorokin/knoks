@@ -41,6 +41,7 @@ export interface WeeklyClientRow {
 export interface WeeklyGrid {
   weekStart: string;
   weekEnd: string;
+  weekNumber: number;
   dates: WeekDate[];
   rows: WeeklyClientRow[];
   dateSummaries: Record<string, DurationSummary>;
@@ -89,6 +90,7 @@ function currentStockholmDate(): Temporal.PlainDate {
 export function getSwedishWeek(dateValue?: string): {
   start: Temporal.PlainDate;
   end: Temporal.PlainDate;
+  weekNumber: number;
   dates: WeekDate[];
 } {
   let selectedDate = currentStockholmDate();
@@ -105,11 +107,11 @@ export function getSwedishWeek(dateValue?: string): {
     const date = start.add({ days: offset });
     return {
       isoDate: date.toString(),
-      weekday: WEEKDAYS[offset]!,
+      weekday: WEEKDAYS[offset]!.slice(0, 3),
     };
   });
 
-  return { start, end: start.add({ days: 6 }), dates };
+  return { start, end: start.add({ days: 6 }), weekNumber: start.weekOfYear as number, dates };
 }
 
 export function shiftIsoDate(isoDate: string, days: number): string {
@@ -202,6 +204,7 @@ export async function getWeeklyGrid(
   return {
     weekStart,
     weekEnd,
+    weekNumber: week.weekNumber,
     dates: week.dates,
     rows: [...rows.values()].sort((left, right) => left.displayName.localeCompare(right.displayName, "sv")),
     dateSummaries,

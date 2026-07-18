@@ -43,9 +43,9 @@ export default async function MyTimePage({
               </Link>
               <div className="text-center">
                 <p className="text-sm font-semibold text-slate-950">
-                  Week {weeklyGrid.weekStart} – {weeklyGrid.weekEnd}
+                  Week {weeklyGrid.weekNumber} · {weeklyGrid.weekStart} – {weeklyGrid.weekEnd}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">Monday to Sunday · Europe/Stockholm</p>
+                <p className="mt-1 text-xs text-slate-600">Mon to Sun · Europe/Stockholm</p>
               </div>
               <Link
                 className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800"
