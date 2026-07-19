@@ -21,6 +21,7 @@ export const timeEntryClassification = pgEnum("time_entry_classification", [
   "non_billable",
 ]);
 
+
 export const companyWorkspace = pgTable(
   "company_workspace",
   {
@@ -70,20 +71,55 @@ export const standingClientRows = pgTable(
   (table) => [primaryKey({ columns: [table.accountId, table.clientId] })],
 );
 
-export const timeEntries = pgTable("time_entry", {
+export const timeEntries = pgTable(
+  "time_entry",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    workDate: date("work_date").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    description: text("description"),
+    classification: timeEntryClassification("classification").notNull(),
+    version: integer("version").notNull().default(1),
+    includedInvoiceBasisId: uuid("included_invoice_basis_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("time_entry_duration_positive", sql`${table.durationMinutes} between 1 and 1440`),
+    check(
+      "time_entry_description_valid",
+      sql`(${table.description} is null or (${table.description} = btrim(${table.description}) and length(${table.description}) between 1 and 500))`,
+    ),
+  ],
+);
+
+export const timeEntryAuditAction = pgEnum("time_entry_audit_action", ["created", "updated", "deleted"]);
+
+export const timeEntryAudits = pgTable("time_entry_audit", {
   id: uuid("id").defaultRandom().primaryKey(),
-  accountId: uuid("account_id")
+  timeEntryId: uuid("time_entry_id").notNull(),
+  action: timeEntryAuditAction("action").notNull(),
+  actingAccountId: uuid("acting_account_id")
     .notNull()
     .references(() => accounts.id),
-  clientId: uuid("client_id")
-    .notNull()
-    .references(() => clients.id),
-  workDate: date("work_date").notNull(),
-  durationMinutes: integer("duration_minutes").notNull(),
-  description: text("description"),
-  classification: timeEntryClassification("classification").notNull(),
-  version: integer("version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  beforeAccountId: uuid("before_account_id"),
+  beforeClientId: uuid("before_client_id"),
+  beforeWorkDate: date("before_work_date"),
+  beforeDurationMinutes: integer("before_duration_minutes"),
+  beforeDescription: text("before_description"),
+  beforeClassification: timeEntryClassification("before_classification"),
+  afterAccountId: uuid("after_account_id"),
+  afterClientId: uuid("after_client_id"),
+  afterWorkDate: date("after_work_date"),
+  afterDurationMinutes: integer("after_duration_minutes"),
+  afterDescription: text("after_description"),
+  afterClassification: timeEntryClassification("after_classification"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sessions = pgTable("session", {

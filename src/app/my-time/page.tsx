@@ -24,7 +24,7 @@ export default async function MyTimePage({
     getWeeklyGrid(account, selectedDate),
   ]);
   const hasActiveClients = clientAvailability.activeCount > 0;
-  const showGrid = hasActiveClients || weeklyGrid.rows.length > 0;
+  const showGrid = hasActiveClients || weeklyGrid.rows.length > 0 || weeklyGrid.deletedHistory.length > 0;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -61,7 +61,9 @@ export default async function MyTimePage({
             ) : null}
             <WeeklyClientGrid
               availableClients={weeklyGrid.availableClients}
+              activeClients={weeklyGrid.activeClients}
               dates={weeklyGrid.dates}
+              deletedHistory={weeklyGrid.deletedHistory}
               dateSummaries={weeklyGrid.dateSummaries}
               rows={weeklyGrid.rows}
               summary={weeklyGrid.summary}
