@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { DurationSummary, TimeEntrySnapshot, TimeEntrySummary } from "@/server/time";
 import {
@@ -242,6 +243,45 @@ function CreateTimeEntryForm({
   );
 }
 
+function TimeEntriesDialog({
+  row,
+  date,
+  activeClients,
+  onClose,
+}: {
+  row: GridRow;
+  date: { isoDate: string; weekday: string };
+  activeClients: Array<{ clientId: string; displayName: string }>;
+  onClose: () => void;
+}) {
+  const label = `${row.displayName}, ${date.weekday} ${date.isoDate}`;
+  const entries = row.entries[date.isoDate] ?? [];
+  const deletedAudits = row.deletedAudits[date.isoDate] ?? [];
+
+  return createPortal(
+    <div
+      aria-label={`${label} Time Entries`}
+      aria-modal="false"
+      className="fixed right-4 top-24 z-50 max-h-[calc(100vh-7rem)] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-300 bg-white p-4 text-left shadow-2xl"
+      role="dialog"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-950">Time Entries</h3>
+          <p className="mt-1 text-xs text-slate-600">{label} · {entries.length} constituent {entries.length === 1 ? "record" : "records"}</p>
+        </div>
+        <button aria-label="Close Time Entries" className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700" onClick={onClose} type="button">Close</button>
+      </div>
+      <ol className="mt-4 space-y-3">
+        {entries.map((entry) => <TimeEntryEditor activeClients={activeClients} entry={entry} key={entry.id} />)}
+      </ol>
+      <DeletedAuditHistory audits={deletedAudits} />
+      <CreateTimeEntryForm clientId={row.clientId} workDate={date.isoDate} />
+    </div>,
+    document.body,
+  );
+}
+
 function GridCell({
   row,
   date,
@@ -249,7 +289,8 @@ function GridCell({
   dateIndex,
   rowCount,
   dateCount,
-  activeClients,
+  onOpen,
+  isOpen,
 }: {
   row: GridRow;
   date: { isoDate: string; weekday: string };
@@ -257,15 +298,13 @@ function GridCell({
   dateIndex: number;
   rowCount: number;
   dateCount: number;
-  activeClients: Array<{ clientId: string; displayName: string }>;
+  onOpen: () => void;
+  isOpen: boolean;
 }) {
   const [state, action, pending] = useActionState(recordGridTimeEntryAction, initialGridEntryState);
   const focusTarget = useRef<string | null>(null);
   const [errorDismissed, setErrorDismissed] = useState(false);
-  const [open, setOpen] = useState(false);
   const cell = row.cells[date.isoDate];
-  const entries = row.entries[date.isoDate] ?? [];
-  const deletedAudits = row.deletedAudits[date.isoDate] ?? [];
   const label = `${row.displayName}, ${date.weekday} ${date.isoDate}`;
   const target = `${rowIndex}-${dateIndex}`;
   const visibleError = errorDismissed ? undefined : state.error;
@@ -291,33 +330,17 @@ function GridCell({
     return (
       <div className="relative h-full">
         <button
-          aria-expanded={open}
+          aria-expanded={isOpen}
           aria-label={`${label}, ${classificationLabel}`}
           className="flex h-full w-full flex-col items-end justify-center rounded-md px-2 py-1 text-right hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
           data-grid-target={target}
-          onClick={() => setOpen((value) => !value)}
+          onClick={onOpen}
           title={classificationLabel}
           type="button"
         >
           <span className="block font-semibold tabular-nums text-slate-950">{formatDuration(cell.totalMinutes)}</span>
           {mixed ? <span className="mt-1 block text-xs tabular-nums text-slate-600">B {formatDuration(cell.billableMinutes)} · NB {formatDuration(cell.nonBillableMinutes)}</span> : <span className="mt-1 block text-xs font-semibold text-blue-700">{cell.billableMinutes > 0 ? "B" : "NB"}</span>}
         </button>
-        {open ? (
-          <div aria-label={`${label} Time Entries`} aria-modal="false" className="absolute right-0 top-full z-30 mt-2 w-[min(34rem,calc(100vw-3rem))] rounded-xl border border-slate-300 bg-white p-4 text-left shadow-xl" role="dialog">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-slate-950">Time Entries</h3>
-                <p className="mt-1 text-xs text-slate-600">{label} · {entries.length} constituent {entries.length === 1 ? "record" : "records"}</p>
-              </div>
-              <button aria-label="Close Time Entries" className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700" onClick={() => setOpen(false)} type="button">Close</button>
-            </div>
-            <ol className="mt-4 space-y-3">
-              {entries.map((entry) => <TimeEntryEditor activeClients={activeClients} entry={entry} key={entry.id} />)}
-            </ol>
-            <DeletedAuditHistory audits={deletedAudits} />
-            <CreateTimeEntryForm clientId={row.clientId} workDate={date.isoDate} />
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -373,6 +396,17 @@ export function WeeklyClientGrid({
 }: WeeklyClientGridProps) {
   const [addState, addAction, addPending] = useActionState(addStandingRowAction, initialStandingRowState);
   const [removeState, removeAction, removePending] = useActionState(removeStandingRowAction, initialStandingRowState);
+  const [openCell, setOpenCell] = useState<{ clientId: string; isoDate: string } | null>(null);
+  const selectedRow = openCell ? rows.find((row) => row.clientId === openCell.clientId) : undefined;
+  const selectedDate = openCell ? dates.find((date) => date.isoDate === openCell.isoDate) : undefined;
+
+  useEffect(() => {
+    if (openCell && (!selectedRow || !selectedDate)) setOpenCell(null);
+  }, [openCell, selectedDate, selectedRow]);
+
+  const openTimeEntries = (clientId: string, isoDate: string) => {
+    setOpenCell((current) => current?.clientId === clientId && current.isoDate === isoDate ? null : { clientId, isoDate });
+  };
 
   return (
     <section className="mt-6">
@@ -399,12 +433,15 @@ export function WeeklyClientGrid({
           </tr></thead>
           <tbody>{rows.map((row, rowIndex) => <tr aria-label={row.displayName} key={row.clientId}>
             <th className="border-r border-t border-slate-200 px-4 py-2 text-left" scope="row"><span className="font-semibold text-slate-950">{row.displayName}</span>{row.archived ? <span className="ml-2 text-xs font-medium uppercase tracking-wide text-slate-500">Archived</span> : null}{row.standing ? <form action={removeAction} className="mt-1"><input name="clientId" type="hidden" value={row.clientId} /><button className="text-xs font-semibold text-blue-700 disabled:opacity-50" disabled={removePending} type="submit">Remove row</button></form> : null}</th>
-            {dates.map((date, dateIndex) => <td className="h-20 border-t border-slate-200 bg-white px-2 py-1" key={date.isoDate}><GridCell activeClients={activeClients} date={date} dateCount={dates.length} dateIndex={dateIndex} row={row} rowCount={rows.length} rowIndex={rowIndex} /></td>)}
+            {dates.map((date, dateIndex) => <td className="h-20 border-t border-slate-200 bg-white px-2 py-1" key={date.isoDate}><GridCell date={date} dateCount={dates.length} dateIndex={dateIndex} isOpen={openCell?.clientId === row.clientId && openCell.isoDate === date.isoDate} onOpen={() => openTimeEntries(row.clientId, date.isoDate)} row={row} rowCount={rows.length} rowIndex={rowIndex} /></td>)}
             <td className="border-l border-t border-slate-200 bg-white px-3 py-2"><Summary label={`${row.displayName} week summary`} value={row.summary} /></td>
           </tr>)}</tbody>
           <tfoot><tr className="bg-slate-50"><th className="border-r border-t border-slate-200 px-4 py-2 text-left" scope="row"><SummaryLabels /></th>{dates.map((date) => <td className="border-t border-slate-200 px-3 py-2" key={date.isoDate}><Summary label={`${date.weekday} ${date.isoDate} summary`} value={dateSummaries[date.isoDate]!} /></td>)}<td className="border-l border-t border-slate-200 px-3 py-2"><Summary label="Whole week summary" value={summary} /></td></tr></tfoot>
         </table>
       </div>
+      {selectedRow && selectedDate && typeof document !== "undefined"
+        ? <TimeEntriesDialog activeClients={activeClients} date={selectedDate} onClose={() => setOpenCell(null)} row={selectedRow} />
+        : null}
       <DeletedAuditHistory audits={deletedHistory} />
     </section>
   );

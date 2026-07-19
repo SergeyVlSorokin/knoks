@@ -104,3 +104,45 @@ test("Member opens a constituent cell, corrects entries, and sees accountable hi
   await staleContext.close();
   await memberContext.close();
 });
+
+
+test("Only one Time Entry window remains open when moving between cells", async ({ browser, page }) => {
+  test.setTimeout(120_000);
+  const password = await createMemberAndClients(
+    page,
+    { displayName: "Window Member", username: "window-member" },
+    ["Window Client"],
+  );
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await signIn(memberPage, "window-member", password);
+  await expect(memberPage).toHaveURL(/\/my-time$/, { timeout: 15_000 });
+  await memberPage.goto("/my-time?week=2099-07-13");
+  await expect(memberPage).toHaveURL(/\/my-time\?week=2099-07-13$/, { timeout: 15_000 });
+  await memberPage.getByLabel("Add a standing Client row").selectOption({ label: "Window Client" });
+  await memberPage.getByRole("button", { name: "Add row" }).click();
+  await expect(memberPage.getByRole("row", { name: "Window Client" })).toBeVisible();
+
+  const grid = memberPage.getByRole("grid", { name: "Weekly time" });
+  const monday = memberPage.getByLabel("Window Client, Mon 2099-07-13");
+  await monday.fill("1:00");
+  await monday.press("Enter");
+  await expect(grid.getByRole("button", { name: /Window Client, Mon 2099-07-13/ })).toBeVisible();
+  const tuesday = memberPage.getByLabel("Window Client, Tue 2099-07-14");
+  await tuesday.fill("2:00");
+  await tuesday.press("Enter");
+  await expect(grid.getByRole("button", { name: /Window Client, Tue 2099-07-14/ })).toBeVisible();
+
+  await grid.getByRole("button", { name: /Window Client, Mon 2099-07-13/ }).click();
+  const mondayDialog = memberPage.getByRole("dialog", { name: "Window Client, Mon 2099-07-13 Time Entries" });
+  await expect(mondayDialog).toBeVisible();
+  await expect(memberPage.getByRole("dialog")).toHaveCount(1);
+  expect(await mondayDialog.evaluate((element) => element.parentElement === document.body)).toBe(true);
+
+  await grid.getByRole("button", { name: /Window Client, Tue 2099-07-14/ }).click();
+  await expect(memberPage.getByRole("dialog")).toHaveCount(1);
+  await expect(memberPage.getByRole("dialog", { name: "Window Client, Tue 2099-07-14 Time Entries" })).toBeVisible();
+  await expect(mondayDialog).toBeHidden();
+
+  await memberContext.close();
+});
