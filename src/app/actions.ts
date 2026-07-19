@@ -23,9 +23,13 @@ import {
 } from "@/server/clients";
 import {
   addStandingClientRow,
+  createTimeEntry,
+  deleteTimeEntry,
   recordGridTimeEntry,
   removeStandingClientRow,
+  updateTimeEntry,
 } from "@/server/time";
+import type { TimeEntryMutationResult } from "@/server/time";
 import type { SignInState } from "./sign-in/state";
 import type {
   AccountAccessState,
@@ -76,6 +80,26 @@ const gridEntrySchema = z.object({
   clientId: z.string().uuid(),
   workDate: z.string(),
   duration: z.string().max(32),
+});
+const timeEntrySchema = z.object({
+  clientId: z.string().uuid(),
+  workDate: z.string(),
+  duration: z.string().max(32),
+  description: z.string(),
+  classification: z.enum(["billable", "non_billable"]),
+});
+function descriptionTooLong(value: string): boolean {
+  return Array.from(value.trim()).length > 500;
+}
+
+const updateTimeEntrySchema = timeEntrySchema.extend({
+  entryId: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+});
+
+const deleteTimeEntrySchema = z.object({
+  entryId: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
 });
 
 const passwordChangeSchema = z.object({
@@ -506,6 +530,116 @@ export async function removeStandingRowAction(
   return changeStandingRow(formData, removeStandingClientRow);
 }
 
+function timeEntryError(reason: Extract<TimeEntryMutationResult, { ok: false }>["reason"]): string {
+  switch (reason) {
+    case "invalid-duration":
+      return "Use a positive duration that resolves to exact whole minutes.";
+    case "daily-limit":
+      return "A Member cannot record more than 24 hours on one date.";
+    case "client-unavailable":
+      return "That Client is no longer active.";
+    case "member-unavailable":
+      return "Sign in again to change time.";
+    case "invalid-date":
+      return "That work date is invalid.";
+    case "description-too-long":
+      return "Descriptions are limited to 500 characters.";
+    case "forbidden":
+      return "You cannot change this Time Entry.";
+    case "included":
+      return "Included Billable Time cannot be changed.";
+    case "reload":
+      return "Time changed concurrently. Reload and try again.";
+  }
+}
+
+export async function createTimeEntryAction(
+  _previousState: import("./my-time/time-entry-state").TimeEntryState,
+  formData: FormData,
+): Promise<import("./my-time/time-entry-state").TimeEntryState> {
+  const attemptedDuration = String(formData.get("duration") ?? "");
+  const attemptedDescription = String(formData.get("description") ?? "");
+  const input = timeEntrySchema.safeParse({
+    clientId: formData.get("clientId"),
+    workDate: formData.get("workDate"),
+    duration: attemptedDuration,
+    description: attemptedDescription,
+    classification: formData.get("classification"),
+  });
+  if (!input.success) {
+    return {
+      error: descriptionTooLong(attemptedDescription)
+        ? "Descriptions are limited to 500 characters."
+        : "Complete the date, duration, description, and classification fields.",
+      attemptedDuration,
+      attemptedDescription,
+    };
+  }
+  const member = await currentSessionAccount();
+  if (!member) {
+    return { error: "Sign in again to change time.", attemptedDuration, attemptedDescription };
+  }
+  const result = await createTimeEntry(member, input.data);
+  if (!result.ok) {
+    return { error: timeEntryError(result.reason), attemptedDuration, attemptedDescription };
+  }
+  revalidatePath("/my-time");
+  return { committed: true };
+}
+
+export async function updateTimeEntryAction(
+  _previousState: import("./my-time/time-entry-state").TimeEntryState,
+  formData: FormData,
+): Promise<import("./my-time/time-entry-state").TimeEntryState> {
+  const attemptedDuration = String(formData.get("duration") ?? "");
+  const attemptedDescription = String(formData.get("description") ?? "");
+  const input = updateTimeEntrySchema.safeParse({
+    entryId: formData.get("entryId"),
+    version: formData.get("version"),
+    clientId: formData.get("clientId"),
+    workDate: formData.get("workDate"),
+    duration: attemptedDuration,
+    description: attemptedDescription,
+    classification: formData.get("classification"),
+  });
+  if (!input.success) {
+    return {
+      error: descriptionTooLong(attemptedDescription)
+        ? "Descriptions are limited to 500 characters."
+        : "Complete the date, duration, description, and classification fields.",
+      attemptedDuration,
+      attemptedDescription,
+    };
+  }
+  const member = await currentSessionAccount();
+  if (!member) {
+    return { error: "Sign in again to change time.", attemptedDuration, attemptedDescription };
+  }
+  const result = await updateTimeEntry(member, input.data);
+  if (!result.ok) {
+    return { error: timeEntryError(result.reason), attemptedDuration, attemptedDescription };
+  }
+  revalidatePath("/my-time");
+  return { committed: true };
+}
+
+export async function deleteTimeEntryAction(
+  _previousState: import("./my-time/time-entry-state").TimeEntryState,
+  formData: FormData,
+): Promise<import("./my-time/time-entry-state").TimeEntryState> {
+  const input = deleteTimeEntrySchema.safeParse({
+    entryId: formData.get("entryId"),
+    version: formData.get("version"),
+  });
+  if (!input.success) return { error: "Time changed concurrently. Reload and try again." };
+  const member = await currentSessionAccount();
+  if (!member) return { error: "Sign in again to change time." };
+  const result = await deleteTimeEntry(member, input.data.entryId, input.data.version);
+  if (!result.ok) return { error: timeEntryError(result.reason) };
+  revalidatePath("/my-time");
+  return { committed: true };
+}
+
 export async function recordGridTimeEntryAction(
   _previousState: GridEntryState,
   formData: FormData,
@@ -535,19 +669,7 @@ export async function recordGridTimeEntryAction(
     input.data.duration,
   );
   if (!result.ok) {
-    const error =
-      result.reason === "invalid-duration"
-        ? "Use a positive duration that resolves to exact whole minutes."
-        : result.reason === "daily-limit"
-          ? "A Member cannot record more than 24 hours on one date."
-          : result.reason === "client-unavailable"
-            ? "That Client is no longer active."
-            : result.reason === "member-unavailable"
-              ? "Sign in again to record time."
-              : result.reason === "invalid-date"
-                ? "That work date is invalid."
-                : "Time changed concurrently. Try again.";
-    return { error, attemptedInput };
+    return { error: timeEntryError(result.reason), attemptedInput };
   }
 
   revalidatePath("/my-time");

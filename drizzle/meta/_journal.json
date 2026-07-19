@@ -29,6 +29,13 @@
       "when": 1784298619762,
       "tag": "0003_rainy_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784491174291,
+      "tag": "0004_tiny_cammi",
+      "breakpoints": true
     }
   ]
 }
