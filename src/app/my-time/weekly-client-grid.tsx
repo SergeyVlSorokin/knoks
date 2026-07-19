@@ -43,9 +43,26 @@ function formatDuration(minutes: number): string {
   return `${hours}:${remainingMinutes.toString().padStart(2, "0")}`;
 }
 
+const DISPLAY_TIME_ZONE = "Europe/Stockholm";
+
+function formatOccurredAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
 function formatSnapshot(value: TimeEntrySnapshot | null): string {
   if (!value) return "—";
-  return `${value.workDate}; ${value.durationMinutes} minutes; ${value.classification === "billable" ? "Billable" : "Non-billable"}; description: ${value.description ?? "none"}; Member identity ${value.accountId}; Client ${value.clientId}`;
+  return `${value.workDate}; ${formatDuration(value.durationMinutes)}; ${value.classification === "billable" ? "Billable" : "Non-billable"}; description: ${value.description ?? "none"}; Member identity ${value.accountDisplayName ?? value.accountId}; Client ${value.clientDisplayName ?? value.clientId}`;
 }
 
 function Summary({ label, value }: { label: string; value: DurationSummary }) {
@@ -98,7 +115,7 @@ function AuditHistory({ entry }: { entry: TimeEntrySummary }) {
         {entry.audits.map((audit, index) => (
           <li key={`${audit.occurredAt}-${index}`}>
             <p className="font-semibold text-slate-800">
-              {audit.action} by {audit.actingDisplayName} at {audit.occurredAt}
+              {audit.action} by {audit.actingDisplayName} at {formatOccurredAt(audit.occurredAt)}
             </p>
             <p>Before: {formatSnapshot(audit.before)}</p>
             <p>After: {formatSnapshot(audit.after)}</p>
@@ -133,7 +150,7 @@ function TimeEntryEditor({
   return (
     <li className="rounded-lg border border-slate-200 p-3">
       <p className="text-sm font-semibold text-slate-950">
-        {entry.accountDisplayName} · {entry.durationMinutes} minutes · {entry.classification === "billable" ? "Billable" : "Non-billable"}
+        {entry.accountDisplayName} · {formatDuration(entry.durationMinutes)} · {entry.classification === "billable" ? "Billable" : "Non-billable"}
       </p>
       <p className="mt-1 text-xs text-slate-600">
         {entry.accountActive ? "Active Member identity" : "Deactivated Member identity"} · Entry {entry.id}
@@ -197,7 +214,7 @@ function DeletedAuditHistory({ audits }: { audits: TimeEntrySummary["audits"] })
       <ol className="mt-2 space-y-2 text-xs text-amber-900">
         {audits.map((audit, index) => (
           <li key={`${audit.timeEntryId}-${audit.occurredAt}-${index}`}>
-            <p className="font-semibold">{audit.action} by {audit.actingDisplayName} at {audit.occurredAt}</p>
+            <p className="font-semibold">{audit.action} by {audit.actingDisplayName} at {formatOccurredAt(audit.occurredAt)}</p>
             <p>Before: {formatSnapshot(audit.before)}</p>
             <p>After: {formatSnapshot(audit.after)}</p>
           </li>

@@ -31,7 +31,9 @@ export interface DurationSummary {
 
 export interface TimeEntrySnapshot {
   accountId: string;
+  accountDisplayName?: string;
   clientId: string;
+  clientDisplayName?: string;
   workDate: string;
   durationMinutes: number;
   description: string | null;
@@ -173,14 +175,21 @@ function snapshot(entry: {
   };
 }
 
+type AuditDisplayNames = {
+  accountNames: ReadonlyMap<string, string>;
+  clientNames: ReadonlyMap<string, string>;
+};
+
 function toAuditSnapshot(row: {
   accountId: string | null;
+  accountDisplayName: string | null;
   clientId: string | null;
+  clientDisplayName: string | null;
   workDate: string | null;
   durationMinutes: number | null;
   description: string | null;
   classification: "billable" | "non_billable" | null;
-}): TimeEntrySnapshot | null {
+}, displayNames: AuditDisplayNames): TimeEntrySnapshot | null {
   if (
     !row.accountId ||
     !row.clientId ||
@@ -192,7 +201,9 @@ function toAuditSnapshot(row: {
   }
   return {
     accountId: row.accountId,
+    accountDisplayName: row.accountDisplayName ?? displayNames.accountNames.get(row.accountId),
     clientId: row.clientId,
+    clientDisplayName: row.clientDisplayName ?? displayNames.clientNames.get(row.clientId),
     workDate: row.workDate,
     durationMinutes: row.durationMinutes,
     description: row.description,
@@ -299,18 +310,31 @@ async function recordAudit(
   before: TimeEntrySnapshot | null,
   after: TimeEntrySnapshot | null,
 ) {
+  const accountIds = [...new Set([before?.accountId, after?.accountId].filter((id): id is string => Boolean(id)))];
+  const clientIds = [...new Set([before?.clientId, after?.clientId].filter((id): id is string => Boolean(id)))];
+  const [accountRows, clientRows] = await Promise.all([
+    transaction.select({ id: accounts.id, displayName: accounts.displayName }).from(accounts).where(inArray(accounts.id, accountIds)),
+    transaction.select({ id: clients.id, displayName: clients.displayName }).from(clients).where(inArray(clients.id, clientIds)),
+  ]);
+  const accountNames = new Map(accountRows.map((account) => [account.id, account.displayName]));
+  const clientNames = new Map(clientRows.map((client) => [client.id, client.displayName]));
+
   await transaction.insert(timeEntryAudits).values({
     timeEntryId,
     action,
     actingAccountId,
     beforeAccountId: before?.accountId ?? null,
+    beforeAccountDisplayName: before?.accountDisplayName ?? accountNames.get(before?.accountId ?? "") ?? null,
     beforeClientId: before?.clientId ?? null,
+    beforeClientDisplayName: before?.clientDisplayName ?? clientNames.get(before?.clientId ?? "") ?? null,
     beforeWorkDate: before?.workDate ?? null,
     beforeDurationMinutes: before?.durationMinutes ?? null,
     beforeDescription: before?.description ?? null,
     beforeClassification: before?.classification ?? null,
     afterAccountId: after?.accountId ?? null,
+    afterAccountDisplayName: after?.accountDisplayName ?? accountNames.get(after?.accountId ?? "") ?? null,
     afterClientId: after?.clientId ?? null,
+    afterClientDisplayName: after?.clientDisplayName ?? clientNames.get(after?.clientId ?? "") ?? null,
     afterWorkDate: after?.workDate ?? null,
     afterDurationMinutes: after?.durationMinutes ?? null,
     afterDescription: after?.description ?? null,
@@ -380,15 +404,19 @@ export async function getWeeklyGrid(
           actingDisplayName: accounts.displayName,
           occurredAt: timeEntryAudits.occurredAt,
           beforeAccountId: timeEntryAudits.beforeAccountId,
+          beforeAccountDisplayName: timeEntryAudits.beforeAccountDisplayName,
           beforeClientId: timeEntryAudits.beforeClientId,
           beforeWorkDate: timeEntryAudits.beforeWorkDate,
+          beforeClientDisplayName: timeEntryAudits.beforeClientDisplayName,
           beforeDurationMinutes: timeEntryAudits.beforeDurationMinutes,
           beforeDescription: timeEntryAudits.beforeDescription,
           beforeClassification: timeEntryAudits.beforeClassification,
           afterAccountId: timeEntryAudits.afterAccountId,
           afterClientId: timeEntryAudits.afterClientId,
+          afterAccountDisplayName: timeEntryAudits.afterAccountDisplayName,
           afterWorkDate: timeEntryAudits.afterWorkDate,
           afterDurationMinutes: timeEntryAudits.afterDurationMinutes,
+          afterClientDisplayName: timeEntryAudits.afterClientDisplayName,
           afterDescription: timeEntryAudits.afterDescription,
           afterClassification: timeEntryAudits.afterClassification,
         })
@@ -420,15 +448,19 @@ export async function getWeeklyGrid(
           actingDisplayName: accounts.displayName,
           occurredAt: timeEntryAudits.occurredAt,
           beforeAccountId: timeEntryAudits.beforeAccountId,
+          beforeAccountDisplayName: timeEntryAudits.beforeAccountDisplayName,
           beforeClientId: timeEntryAudits.beforeClientId,
           beforeWorkDate: timeEntryAudits.beforeWorkDate,
+          beforeClientDisplayName: timeEntryAudits.beforeClientDisplayName,
           beforeDurationMinutes: timeEntryAudits.beforeDurationMinutes,
           beforeDescription: timeEntryAudits.beforeDescription,
           beforeClassification: timeEntryAudits.beforeClassification,
           afterAccountId: timeEntryAudits.afterAccountId,
           afterClientId: timeEntryAudits.afterClientId,
+          afterAccountDisplayName: timeEntryAudits.afterAccountDisplayName,
           afterWorkDate: timeEntryAudits.afterWorkDate,
           afterDurationMinutes: timeEntryAudits.afterDurationMinutes,
+          afterClientDisplayName: timeEntryAudits.afterClientDisplayName,
           afterDescription: timeEntryAudits.afterDescription,
           afterClassification: timeEntryAudits.afterClassification,
         })
@@ -437,6 +469,22 @@ export async function getWeeklyGrid(
         .where(inArray(timeEntryAudits.timeEntryId, deletedEntryIds))
         .orderBy(asc(timeEntryAudits.occurredAt))
     : [];
+
+  const allAuditRows = [...auditRows, ...deletedAuditRows];
+  const auditAccountIds = [...new Set(allAuditRows.flatMap((audit) => [audit.beforeAccountId, audit.afterAccountId].filter((id): id is string => Boolean(id))))];
+  const auditClientIds = [...new Set(allAuditRows.flatMap((audit) => [audit.beforeClientId, audit.afterClientId].filter((id): id is string => Boolean(id))))];
+  const [auditAccounts, auditClients] = await Promise.all([
+    auditAccountIds.length
+      ? db.select({ id: accounts.id, displayName: accounts.displayName }).from(accounts).where(inArray(accounts.id, auditAccountIds))
+      : Promise.resolve([]),
+    auditClientIds.length
+      ? db.select({ id: clients.id, displayName: clients.displayName }).from(clients).where(inArray(clients.id, auditClientIds))
+      : Promise.resolve([]),
+  ]);
+  const auditDisplayNames: AuditDisplayNames = {
+    accountNames: new Map(auditAccounts.map((account) => [account.id, account.displayName])),
+    clientNames: new Map(auditClients.map((client) => [client.id, client.displayName])),
+  };
 
   const auditsByEntry = new Map<string, TimeEntryAuditSummary[]>();
   for (const audit of auditRows) {
@@ -449,20 +497,24 @@ export async function getWeeklyGrid(
       occurredAt: audit.occurredAt.toISOString(),
       before: toAuditSnapshot({
         accountId: audit.beforeAccountId,
+        accountDisplayName: audit.beforeAccountDisplayName,
         clientId: audit.beforeClientId,
         workDate: audit.beforeWorkDate,
+        clientDisplayName: audit.beforeClientDisplayName,
         durationMinutes: audit.beforeDurationMinutes,
         description: audit.beforeDescription,
         classification: audit.beforeClassification,
-      }),
+      }, auditDisplayNames),
       after: toAuditSnapshot({
         accountId: audit.afterAccountId,
         clientId: audit.afterClientId,
         workDate: audit.afterWorkDate,
+        accountDisplayName: audit.afterAccountDisplayName,
         durationMinutes: audit.afterDurationMinutes,
         description: audit.afterDescription,
+        clientDisplayName: audit.afterClientDisplayName,
         classification: audit.afterClassification,
-      }),
+      }, auditDisplayNames),
     });
     auditsByEntry.set(audit.timeEntryId, entryAudits);
   }
@@ -481,20 +533,24 @@ export async function getWeeklyGrid(
       occurredAt: audit.occurredAt.toISOString(),
       before: toAuditSnapshot({
         accountId: audit.beforeAccountId,
+        accountDisplayName: audit.beforeAccountDisplayName,
         clientId: audit.beforeClientId,
         workDate: audit.beforeWorkDate,
+        clientDisplayName: audit.beforeClientDisplayName,
         durationMinutes: audit.beforeDurationMinutes,
         description: audit.beforeDescription,
         classification: audit.beforeClassification,
-      }),
+      }, auditDisplayNames),
       after: toAuditSnapshot({
         accountId: audit.afterAccountId,
         clientId: audit.afterClientId,
         workDate: audit.afterWorkDate,
+        accountDisplayName: audit.afterAccountDisplayName,
         durationMinutes: audit.afterDurationMinutes,
         description: audit.afterDescription,
+        clientDisplayName: audit.afterClientDisplayName,
         classification: audit.afterClassification,
-      }),
+      }, auditDisplayNames),
     };
     deletedHistory.push(summary);
     const key = `${clientId}:${workDate}`;
