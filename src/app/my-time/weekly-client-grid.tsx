@@ -62,7 +62,7 @@ function formatOccurredAt(value: string): string {
 
 function formatSnapshot(value: TimeEntrySnapshot | null): string {
   if (!value) return "—";
-  return `${value.workDate}; ${formatDuration(value.durationMinutes)}; ${value.classification === "billable" ? "Billable" : "Non-billable"}; description: ${value.description ?? "none"}; Member identity ${value.accountDisplayName ?? value.accountId}; Client ${value.clientDisplayName ?? value.clientId}`;
+  return `${value.workDate}; ${formatDuration(value.durationMinutes)}; ${value.classification === "billable" ? "Billable" : "Non-billable"}; description: ${value.description ?? "none"}; Member identity ${value.accountDisplayName ?? "Unknown Member"}; Client ${value.clientDisplayName ?? "Unknown Client"}`;
 }
 
 function Summary({ label, value }: { label: string; value: DurationSummary }) {
