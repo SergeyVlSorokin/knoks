@@ -54,6 +54,8 @@ test("Member opens a constituent cell, corrects entries, and sees accountable hi
   const corrected = memberPage.getByRole("dialog", { name: "Correction Client, Mon 2099-07-13 Time Entries" });
   await expect(corrected).toContainText("Before:");
   await expect(corrected).toContainText("After:");
+  await expect(corrected).toContainText("Before: 2099-07-13; 1:00; Billable; description: none; Member identity Correction Member; Client Correction Client");
+  await expect(corrected).toContainText("After: 2099-07-13; 1:30; Billable; description: Client workshop; Member identity Correction Member; Client Correction Client");
   const deletedEntry = corrected.locator("ol").first().locator(":scope > li").filter({ hasText: "Discovery" });
   await deletedEntry.locator("form").nth(1).evaluate((form) => (form as HTMLFormElement).requestSubmit());
   await expect(cell()).toHaveText(/1:30.*B/);
@@ -62,7 +64,8 @@ test("Member opens a constituent cell, corrects entries, and sees accountable hi
 
   const afterDelete = memberPage.getByRole("dialog", { name: "Correction Client, Mon 2099-07-13 Time Entries" });
   await expect(afterDelete).toContainText("Deleted entry history");
-  await expect(afterDelete).toContainText("Before: 2099-07-13; 30 minutes");
+  await expect(afterDelete).toContainText("Before: 2099-07-13; 0:30; Non-billable; description: Discovery; Member identity Correction Member; Client Correction Client");
+  await expect(afterDelete).toContainText(/deleted by Correction Member at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
 
   const staleContext = await browser.newContext();
   const stalePage = await staleContext.newPage();
