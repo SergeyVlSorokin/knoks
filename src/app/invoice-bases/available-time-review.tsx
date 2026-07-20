@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AvailableBillableTimeReview } from "@/server/invoice-bases";
 
@@ -11,10 +11,103 @@ function formatDuration(minutes: number): string {
 function summaryText(summary: { entryCount: number; durationMinutes: number }): string {
   return `${summary.entryCount} ${summary.entryCount === 1 ? "entry" : "entries"} · ${formatDuration(summary.durationMinutes)}`;
 }
+interface MemberReviewGroupProps {
+  member: { id: string; displayName: string };
+  entries: AvailableBillableTimeReview["availableEntries"];
+  selectedEntryIds: Set<string>;
+  expanded: boolean;
+  onToggle: () => void;
+  onSelectEntry: (entryId: string, selected: boolean) => void;
+  onSelectMember: (entryIds: string[], selected: boolean) => void;
+}
+
+function MemberReviewGroup({
+  member,
+  entries,
+  selectedEntryIds,
+  expanded,
+  onToggle,
+  onSelectEntry,
+  onSelectMember,
+}: MemberReviewGroupProps) {
+  const memberCheckbox = useRef<HTMLInputElement>(null);
+  const selectedEntries = entries.filter((entry) => selectedEntryIds.has(entry.id));
+  const selectedMinutes = selectedEntries.reduce((total, entry) => total + entry.durationMinutes, 0);
+  const totalMinutes = entries.reduce((total, entry) => total + entry.durationMinutes, 0);
+  const allSelected = selectedEntries.length === entries.length;
+  const partiallySelected = selectedEntries.length > 0 && !allSelected;
+
+  useEffect(() => {
+    if (memberCheckbox.current) memberCheckbox.current.indeterminate = partiallySelected;
+  }, [partiallySelected]);
+
+  return (
+    <section aria-label={`${member.displayName} available time`} className="border-b border-slate-200 last:border-b-0" role="group">
+      <div className="flex items-center gap-4 px-3 py-4">
+        <input
+          aria-label={`Include all Available Billable Time for ${member.displayName}`}
+          checked={allSelected}
+          onChange={(event) => onSelectMember(entries.map((entry) => entry.id), event.currentTarget.checked)}
+          ref={memberCheckbox}
+          type="checkbox"
+        />
+        <button
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${member.displayName}`}
+          className="flex min-w-0 flex-1 items-center justify-between gap-6 text-left"
+          onClick={onToggle}
+          type="button"
+        >
+          <span className="font-semibold text-slate-950">{member.displayName}</span>
+          <span className="text-sm tabular-nums text-slate-700">
+            {formatDuration(selectedMinutes)} of {formatDuration(totalMinutes)} selected · {selectedEntries.length} of {entries.length} records
+          </span>
+        </button>
+      </div>
+      {expanded ? (
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-3 font-semibold">Include</th>
+              <th className="px-3 py-3 font-semibold">Date</th>
+              <th className="px-3 py-3 font-semibold">Description</th>
+              <th className="px-3 py-3 text-right font-semibold">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <tr className="border-b border-slate-100" key={entry.id}>
+                <td className="px-3 py-3">
+                  <input
+                    aria-label={`Include ${entry.workDate}, ${entry.accountDisplayName}, ${formatDuration(entry.durationMinutes)}`}
+                    checked={selectedEntryIds.has(entry.id)}
+                    onChange={(event) => onSelectEntry(entry.id, event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                </td>
+                <td className="px-3 py-3 tabular-nums text-slate-700">{entry.workDate}</td>
+                <td className="px-3 py-3 text-slate-700">{entry.description ?? "No description"}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-slate-950">{formatDuration(entry.durationMinutes)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </section>
+  );
+}
+
 
 export function AvailableTimeReview({ review }: { review: AvailableBillableTimeReview }) {
   const [selectedEntryIds, setSelectedEntryIds] = useState(() => new Set(review.availableEntries.map((entry) => entry.id)));
-  const [visibleMemberIds, setVisibleMemberIds] = useState(() => new Set(review.members.map((member) => member.id)));
+  const [expandedMemberIds, setExpandedMemberIds] = useState(() => new Set(review.members.map((member) => member.id)));
+  const memberGroups = useMemo(() => {
+    const entriesByMember = new Map(review.members.map((member) => [member.id, [] as AvailableBillableTimeReview["availableEntries"]]));
+    for (const entry of review.availableEntries) {
+      entriesByMember.get(entry.accountId)?.push(entry);
+    }
+    return review.members.map((member) => ({ member, entries: entriesByMember.get(member.id) ?? [] }));
+  }, [review]);
   const selectedEntries = useMemo(
     () => review.availableEntries.filter((entry) => selectedEntryIds.has(entry.id)),
     [review.availableEntries, selectedEntryIds],
@@ -25,7 +118,17 @@ export function AvailableTimeReview({ review }: { review: AvailableBillableTimeR
     (total, entry) => total + (selectedEntryIds.has(entry.id) ? 0 : entry.durationMinutes),
     0,
   );
-  const visibleEntries = review.availableEntries.filter((entry) => visibleMemberIds.has(entry.accountId));
+
+  function setEntriesSelected(entryIds: string[], selected: boolean) {
+    setSelectedEntryIds((current) => {
+      const next = new Set(current);
+      for (const entryId of entryIds) {
+        if (selected) next.add(entryId);
+        else next.delete(entryId);
+      }
+      return next;
+    });
+  }
 
   return (
     <section aria-label="Available Billable Time review" className="mt-8 space-y-6">
@@ -62,76 +165,38 @@ export function AvailableTimeReview({ review }: { review: AvailableBillableTimeR
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <fieldset>
-          <legend className="text-sm font-semibold text-slate-950">Visible Members</legend>
-          <p className="mt-1 text-sm text-slate-600">Filtering review rows never changes the selected Invoice Basis composition.</p>
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
-            {review.members.map((member) => (
-              <label className="flex items-center gap-2 text-sm text-slate-700" key={member.id}>
-                <input
-                  aria-label={`Review rows for ${member.displayName}`}
-                  checked={visibleMemberIds.has(member.id)}
-                  onChange={(event) => {
-                    const isVisible = event.currentTarget.checked;
-                    setVisibleMemberIds((current) => {
-                      const next = new Set(current);
-                      if (isVisible) next.add(member.id);
-                      else next.delete(member.id);
-                      return next;
-                    });
-                  }}
-                  type="checkbox"
-                />
-                {member.displayName}
-              </label>
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <h3 className="text-sm font-semibold text-slate-950">Available Billable Time by Member</h3>
+          <p className="mt-1 text-sm text-slate-600">Collapse a Member to filter their review rows out of view. Collapsing never changes the selected Invoice Basis composition.</p>
+        </div>
+        {review.availableEntries.length === 0 ? (
+          <p className="m-6 rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-700">No Available Billable Time exists in this range.</p>
+        ) : (
+          <div>
+            {memberGroups.map(({ member, entries }) => (
+              <MemberReviewGroup
+                entries={entries}
+                expanded={expandedMemberIds.has(member.id)}
+                key={member.id}
+                member={member}
+                onSelectEntry={(entryId, selected) => setEntriesSelected([entryId], selected)}
+                onSelectMember={setEntriesSelected}
+                onToggle={() => {
+                  setExpandedMemberIds((current) => {
+                    const next = new Set(current);
+                    if (next.has(member.id)) next.delete(member.id);
+                    else next.add(member.id);
+                    return next;
+                  });
+                }}
+                selectedEntryIds={selectedEntryIds}
+              />
             ))}
           </div>
-        </fieldset>
-
-        {review.availableEntries.length === 0 ? (
-          <p className="mt-6 rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-700">No Available Billable Time exists in this range.</p>
-        ) : (
-          <table className="mt-6 w-full border-collapse text-left text-sm">
-            <thead className="border-y border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-3 font-semibold">Include</th>
-                <th className="px-3 py-3 font-semibold">Date</th>
-                <th className="px-3 py-3 font-semibold">Member</th>
-                <th className="px-3 py-3 font-semibold">Description</th>
-                <th className="px-3 py-3 text-right font-semibold">Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleEntries.map((entry) => (
-                <tr className="border-b border-slate-100" key={entry.id}>
-                  <td className="px-3 py-3">
-                    <input
-                      aria-label={`Include ${entry.workDate}, ${entry.accountDisplayName}, ${formatDuration(entry.durationMinutes)}`}
-                      checked={selectedEntryIds.has(entry.id)}
-                      onChange={(event) => {
-                        const isSelected = event.currentTarget.checked;
-                        setSelectedEntryIds((current) => {
-                          const next = new Set(current);
-                          if (isSelected) next.add(entry.id);
-                          else next.delete(entry.id);
-                          return next;
-                        });
-                      }}
-                      type="checkbox"
-                    />
-                  </td>
-                  <td className="px-3 py-3 tabular-nums text-slate-700">{entry.workDate}</td>
-                  <td className="px-3 py-3 text-slate-950">{entry.accountDisplayName}{entry.accountActive ? "" : " (deactivated)"}</td>
-                  <td className="px-3 py-3 text-slate-700">{entry.description ?? "No description"}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-slate-950">{formatDuration(entry.durationMinutes)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         )}
 
-        <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-5">
+        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-5">
           <p className="text-sm text-slate-600">At least one selected entry is required to create an Invoice Basis.</p>
           <button className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300" disabled={selectedEntries.length === 0} type="button">
             Create Invoice Basis
