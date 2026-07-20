@@ -14,3 +14,7 @@
 - [ ] Non-billable entries and totals appear separately as context and cannot be selected for inclusion.
 - [ ] Earlier Available Billable Time is summarized with its oldest date; later Available Billable Time, including future dates, is summarized separately.
 - [ ] Members cannot discover the review or Invoice Basis surfaces.
+
+## Comments
+
+- 2026-07-20 — Decision from prototypes captured on `prototype/member-tree-review`: use the tree-lines layout. Members start collapsed; native tri-state Member checkboxes select or clear their nested entries; expanding shows indented record dates with connector lines that terminate at the final record's midpoint. The Member row retains selected duration and record count.

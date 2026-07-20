@@ -43,10 +43,11 @@ function MemberReviewGroup({
 
   return (
     <section aria-label={`${member.displayName} available time`} className="border-b border-slate-200 last:border-b-0" role="group">
-      <div className="flex items-center gap-4 px-3 py-4">
+      <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-4">
         <input
           aria-label={`Include all Available Billable Time for ${member.displayName}`}
           checked={allSelected}
+          className="size-4 accent-blue-700"
           onChange={(event) => onSelectMember(entries.map((entry) => entry.id), event.currentTarget.checked)}
           ref={memberCheckbox}
           type="checkbox"
@@ -54,44 +55,36 @@ function MemberReviewGroup({
         <button
           aria-expanded={expanded}
           aria-label={`${expanded ? "Collapse" : "Expand"} ${member.displayName}`}
-          className="flex min-w-0 flex-1 items-center justify-between gap-6 text-left"
+          className="flex size-6 items-center justify-center rounded text-lg text-slate-600 hover:bg-slate-100"
           onClick={onToggle}
           type="button"
         >
-          <span className="font-semibold text-slate-950">{member.displayName}</span>
-          <span className="text-sm tabular-nums text-slate-700">
-            {formatDuration(selectedMinutes)} of {formatDuration(totalMinutes)} selected · {selectedEntries.length} of {entries.length} records
-          </span>
+          {expanded ? "▾" : "▸"}
         </button>
+        <p className="font-semibold text-slate-950">{member.displayName}</p>
+        <span className="text-sm tabular-nums text-slate-700">
+          {formatDuration(selectedMinutes)} of {formatDuration(totalMinutes)} selected · {selectedEntries.length} of {entries.length} records
+        </span>
       </div>
       {expanded ? (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="border-y border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-3 font-semibold">Include</th>
-              <th className="px-3 py-3 font-semibold">Date</th>
-              <th className="px-3 py-3 font-semibold">Description</th>
-              <th className="px-3 py-3 text-right font-semibold">Duration</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr className="border-b border-slate-100" key={entry.id}>
-                <td className="px-3 py-3">
-                  <input
-                    aria-label={`Include ${entry.workDate}, ${entry.accountDisplayName}, ${formatDuration(entry.durationMinutes)}`}
-                    checked={selectedEntryIds.has(entry.id)}
-                    onChange={(event) => onSelectEntry(entry.id, event.currentTarget.checked)}
-                    type="checkbox"
-                  />
-                </td>
-                <td className="px-3 py-3 tabular-nums text-slate-700">{entry.workDate}</td>
-                <td className="px-3 py-3 text-slate-700">{entry.description ?? "No description"}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-slate-950">{formatDuration(entry.durationMinutes)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ol className="mb-3 ml-12 mr-20">
+          {entries.map((entry, index) => (
+            <li className="relative grid grid-cols-[auto_7rem_minmax(0,1fr)_5rem] items-center gap-3 py-2" key={entry.id}>
+              <span className={`absolute -left-6 border-l border-slate-300 ${index === entries.length - 1 ? "bottom-1/2 top-0" : "inset-y-0"}`} />
+              <span className="absolute -left-6 top-1/2 w-5 border-t border-slate-300" />
+              <input
+                aria-label={`Include ${entry.workDate}, ${entry.accountDisplayName}, ${formatDuration(entry.durationMinutes)}`}
+                checked={selectedEntryIds.has(entry.id)}
+                className="size-4 accent-blue-700"
+                onChange={(event) => onSelectEntry(entry.id, event.currentTarget.checked)}
+                type="checkbox"
+              />
+              <time className="tabular-nums text-slate-700">{entry.workDate}</time>
+              <span className="text-slate-700">{entry.description ?? "No description"}</span>
+              <span className="pr-2 text-right tabular-nums text-slate-950">{formatDuration(entry.durationMinutes)}</span>
+            </li>
+          ))}
+        </ol>
       ) : null}
     </section>
   );
@@ -100,7 +93,7 @@ function MemberReviewGroup({
 
 export function AvailableTimeReview({ review }: { review: AvailableBillableTimeReview }) {
   const [selectedEntryIds, setSelectedEntryIds] = useState(() => new Set(review.availableEntries.map((entry) => entry.id)));
-  const [expandedMemberIds, setExpandedMemberIds] = useState(() => new Set(review.members.map((member) => member.id)));
+  const [expandedMemberIds, setExpandedMemberIds] = useState<Set<string>>(() => new Set());
   const memberGroups = useMemo(() => {
     const entriesByMember = new Map(review.members.map((member) => [member.id, [] as AvailableBillableTimeReview["availableEntries"]]));
     for (const entry of review.availableEntries) {
@@ -168,7 +161,6 @@ export function AvailableTimeReview({ review }: { review: AvailableBillableTimeR
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-5">
           <h3 className="text-sm font-semibold text-slate-950">Available Billable Time by Member</h3>
-          <p className="mt-1 text-sm text-slate-600">Collapse a Member to filter their review rows out of view. Collapsing never changes the selected Invoice Basis composition.</p>
         </div>
         {review.availableEntries.length === 0 ? (
           <p className="m-6 rounded-md bg-slate-50 px-4 py-3 text-sm text-slate-700">No Available Billable Time exists in this range.</p>

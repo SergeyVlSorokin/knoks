@@ -24,6 +24,9 @@ test("Administrator reviews grouped Available Billable Time without collapsing d
   const mondayCell = grid.getByRole("button", { name: /Review Client, Mon 2099-07-13/ });
   await mondayCell.click();
   const entries = memberPage.getByRole("dialog", { name: "Review Client, Mon 2099-07-13 Time Entries" });
+  const billableDescription = "Billable review description that must remain completely visible";
+  await entries.locator("form").first().locator('textarea[name="description"]').fill(billableDescription);
+  await entries.locator("form").first().evaluate((form) => (form as HTMLFormElement).requestSubmit());
   await entries.getByLabel("New entry duration").fill("0:30");
   await entries.getByLabel("New entry description").fill("Internal preparation");
   await entries.locator("form").last().locator('select[name="classification"]').selectOption("non_billable");
@@ -63,12 +66,17 @@ test("Administrator reviews grouped Available Billable Time without collapsing d
   const memberGroup = review.getByRole("group", { name: "Review Member available time" });
   await expect(memberGroup).toContainText("1:45 of 1:45 selected · 2 of 2 records");
   const includeAll = memberGroup.getByLabel("Include all Available Billable Time for Review Member");
+  const tuesdayEntry = memberGroup.getByLabel("Include 2099-07-14, Review Member, 0:45");
+  await expect(tuesdayEntry).toBeHidden();
+  await memberGroup.getByRole("button", { name: "Expand Review Member" }).click();
+  await expect(tuesdayEntry).toBeVisible();
+  await expect(memberGroup).toContainText(billableDescription);
   await memberGroup.getByRole("button", { name: "Collapse Review Member" }).click();
-  await expect(memberGroup.getByLabel("Include 2099-07-14, Review Member, 0:45")).toBeHidden();
+  await expect(tuesdayEntry).toBeHidden();
   await expect(review).toContainText("2 selected · 1:45");
   await memberGroup.getByRole("button", { name: "Expand Review Member" }).click();
 
-  await memberGroup.getByLabel("Include 2099-07-14, Review Member, 0:45").click();
+  await tuesdayEntry.click();
   await expect(memberGroup).toContainText("1:00 of 1:45 selected · 1 of 2 records");
   await expect(review).toContainText("1 selected · 1:00");
   await includeAll.click();
