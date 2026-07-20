@@ -35,6 +35,11 @@ export function WorkspaceHeader({
               Administration
             </Link>
           ) : null}
+          {role === "administrator" ? (
+            <Link className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100" href="/invoice-bases">
+              Invoice bases
+            </Link>
+          ) : null}
         </nav>
         <div className="ml-auto flex items-center gap-4">
           <div className="text-right">

@@ -1,0 +1,89 @@
+import { expect, test } from "@playwright/test";
+import { createMemberAndClients, signIn } from "./support/workspace";
+
+test("Administrator reviews available billable time without filters changing selection", async ({ browser, page }) => {
+  test.setTimeout(120_000);
+  const password = await createMemberAndClients(
+    page,
+    { displayName: "Review Member", username: "review-member" },
+    ["Review Client"],
+  );
+
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await signIn(memberPage, "review-member", password);
+  await expect(memberPage).toHaveURL(/\/my-time$/, { timeout: 15_000 });
+
+  await memberPage.goto("/my-time?week=2099-07-13");
+  await memberPage.getByLabel("Add a standing Client row").selectOption({ label: "Review Client" });
+  await memberPage.getByRole("button", { name: "Add row" }).click();
+  const grid = memberPage.getByRole("grid", { name: "Weekly time" });
+  const mondayInput = memberPage.getByLabel("Review Client, Mon 2099-07-13");
+  await mondayInput.fill("1:00");
+  await mondayInput.press("Enter");
+  const mondayCell = grid.getByRole("button", { name: /Review Client, Mon 2099-07-13/ });
+  await mondayCell.click();
+  const entries = memberPage.getByRole("dialog", { name: "Review Client, Mon 2099-07-13 Time Entries" });
+  await entries.getByLabel("New entry duration").fill("0:30");
+  await entries.getByLabel("New entry description").fill("Internal preparation");
+  await entries.locator("form").last().locator('select[name="classification"]').selectOption("non_billable");
+  await entries.locator("form").last().evaluate((form) => (form as HTMLFormElement).requestSubmit());
+
+  await memberPage.goto("/my-time?week=2099-06-29");
+  const earlierCell = memberPage.getByLabel("Review Client, Mon 2099-06-29");
+  await earlierCell.fill("0:45");
+  await earlierCell.press("Enter");
+
+  await memberPage.goto("/my-time?week=2099-07-20");
+  const laterCell = memberPage.getByLabel("Review Client, Mon 2099-07-20");
+  await laterCell.fill("1:15");
+  await laterCell.press("Enter");
+
+  await page.goto("/invoice-bases");
+  await expect(page).toHaveURL(/\/invoice-bases$/);
+  const setup = page.getByRole("form", { name: "Review available billable time" });
+  await setup.getByLabel("Client").selectOption({ label: "Review Client" });
+  await setup.getByLabel("From date").fill("2099-07-13");
+  await setup.getByLabel("To date").fill("2099-07-13");
+  await setup.getByRole("button", { name: "Review time" }).click();
+  await page.waitForLoadState("networkidle");
+
+  const review = page.getByRole("region", { name: "Available Billable Time review" });
+  await expect(review).toContainText("1 selected · 1:00");
+  await expect(review).toContainText("0 excluded · 0:00");
+  await expect(review).toContainText("Non-billable context: 1 entry · 0:30");
+  await expect(review).toContainText("2099-07-13 · Review Member · 0:30 · Internal preparation");
+  await expect(review).toContainText("Earlier Available Billable Time: 1 entry · 0:45; oldest date 2099-06-29");
+  await expect(review).toContainText("Later Available Billable Time: 1 entry · 1:15");
+
+  const memberFilter = review.getByLabel("Review rows for Review Member");
+  await memberFilter.click();
+  await expect(memberFilter).not.toBeChecked();
+  await expect(review.getByRole("row", { name: /Review Member/ })).toBeHidden();
+  await expect(review).toContainText("1 selected · 1:00");
+  await memberFilter.check();
+
+  const includedEntry = review.getByLabel("Include 2099-07-13, Review Member, 1:00");
+  await includedEntry.click();
+  await expect(review).toContainText("0 selected · 0:00");
+  await expect(review).toContainText("1 excluded · 1:00");
+  await expect(review.getByRole("button", { name: "Create Invoice Basis" })).toBeDisabled();
+  await page.goto("/administration");
+  await page.waitForLoadState("networkidle");
+  const client = page.getByRole("article", { name: "Review Client Client" });
+  await client.getByRole("button", { name: "Archive" }).click();
+  await expect(client).toContainText("Archived");
+  await page.goto("/invoice-bases");
+  const archivedSetup = page.getByRole("form", { name: "Review available billable time" });
+  await archivedSetup.getByLabel("Client").selectOption({ label: "Review Client (archived)" });
+  await archivedSetup.getByLabel("From date").fill("2099-07-13");
+  await archivedSetup.getByLabel("To date").fill("2099-07-13");
+  await archivedSetup.getByRole("button", { name: "Review time" }).click();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("region", { name: "Available Billable Time review" })).toContainText("Review Client (archived)");
+
+
+  await memberPage.goto("/invoice-bases");
+  await expect(memberPage).toHaveURL(/\/my-time$/);
+  await memberContext.close();
+});
