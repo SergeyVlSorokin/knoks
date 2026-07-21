@@ -13,3 +13,7 @@
 - [x] Each subtotal and grand total displays authoritative hours-and-minutes plus an independently derived decimal-hour value rounded half-up to two places with a Swedish decimal comma.
 - [x] Invoice Basis history is available per Client without introducing external-invoice, sent, paid, approval, or reporting states.
 - [x] Included Billable Time cannot be edited or deleted by either its Member or an Administrator while the Invoice Basis is active.
+- [x] (Extra) An always-visible dashboard shows recent Invoice Bases across all clients when first landing on the page.
+- [x] (Extra) A dedicated Client Filter on the history list allows looking up history for a specific client without starting a review.
+- [x] (Extra) Pagination controls allow traversing history when there are many Invoice Bases.
+- [x] (Extra) Layout consistency is maintained by always displaying the Client column in both global and filtered views.
