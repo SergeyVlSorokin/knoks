@@ -68,7 +68,12 @@ export default async function InvoiceBasesPage({
         </form>
 
         {reviewErrorMessage ? <p className="mt-5 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-800">{reviewErrorMessage}</p> : null}
-        {result?.ok ? <AvailableTimeReview review={result.review} /> : null}
+        {result?.ok ? (
+          <AvailableTimeReview
+            key={`${clientId}-${startDate}-${endDate}-${result.review.availableEntries.map((e) => `${e.id}:${e.version}`).join(",")}`}
+            review={result.review}
+          />
+        ) : null}
       </main>
     </div>
   );

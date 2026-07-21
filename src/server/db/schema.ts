@@ -27,6 +27,7 @@ export const companyWorkspace = pgTable(
   {
     id: integer("id").primaryKey(),
     name: text("name").notNull(),
+    nextInvoiceBasisSequence: integer("next_invoice_basis_sequence").notNull().default(1),
   },
   (table) => [check("single_company_workspace", sql`${table.id} = 1`)],
 );
@@ -86,7 +87,7 @@ export const timeEntries = pgTable(
     description: text("description"),
     classification: timeEntryClassification("classification").notNull(),
     version: integer("version").notNull().default(1),
-    includedInvoiceBasisId: uuid("included_invoice_basis_id"),
+    includedInvoiceBasisId: uuid("included_invoice_basis_id").references(() => invoiceBasis.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -132,4 +133,37 @@ export const sessions = pgTable("session", {
     .notNull()
     .references(() => accounts.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invoiceBasis = pgTable("invoice_basis", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sequenceNumber: integer("sequence_number").notNull().unique(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  createdByAccountId: uuid("created_by_account_id")
+    .notNull()
+    .references(() => accounts.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidedByAccountId: uuid("voided_by_account_id").references(() => accounts.id),
+  voidReason: text("void_reason"),
+});
+
+export const invoiceBasisItems = pgTable("invoice_basis_item", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceBasisId: uuid("invoice_basis_id")
+    .notNull()
+    .references(() => invoiceBasis.id, { onDelete: "cascade" }),
+  timeEntryId: uuid("time_entry_id").notNull(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id),
+  accountDisplayName: text("account_display_name").notNull(),
+  workDate: date("work_date").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  description: text("description"),
+  classification: timeEntryClassification("classification").notNull(),
 });

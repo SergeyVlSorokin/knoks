@@ -29,6 +29,7 @@ import {
   removeStandingClientRow,
   updateTimeEntry,
 } from "@/server/time";
+import { createInvoiceBasis } from "@/server/invoice-bases";
 import type { TimeEntryMutationResult } from "@/server/time";
 import type { SignInState } from "./sign-in/state";
 import type {
@@ -106,6 +107,18 @@ const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(1),
   confirmation: z.string().min(1),
+});
+
+const createInvoiceBasisSchema = z.object({
+  clientId: z.string().uuid(),
+  startDate: z.string(),
+  endDate: z.string(),
+  selectedEntries: z.array(
+    z.object({
+      id: z.string().uuid(),
+      version: z.number().int().positive(),
+    }),
+  ),
 });
 
 export async function signInAction(
@@ -674,4 +687,41 @@ export async function recordGridTimeEntryAction(
 
   revalidatePath("/my-time");
   return { committed: true };
+}
+
+export async function createInvoiceBasisAction(input: {
+  clientId: string;
+  startDate: string;
+  endDate: string;
+  selectedEntries: Array<{ id: string; version: number }>;
+}) {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const parsed = createInvoiceBasisSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Complete all fields and select at least one entry." };
+  }
+
+  const result = await createInvoiceBasis(administrator, parsed.data);
+  if (!result.ok) {
+    if (result.reason === "forbidden") {
+      return { ok: false, error: "Only Administrators can create Invoice Bases." };
+    }
+    if (result.reason === "client-unavailable") {
+      return { ok: false, error: "That Client is no longer active." };
+    }
+    if (result.reason === "no-entries-selected") {
+      return { ok: false, error: "Select at least one Available Billable Time entry." };
+    }
+    if (result.reason === "reload") {
+      return { ok: false, error: "Time entries changed concurrently. Reload and try again." };
+    }
+    return { ok: false, error: "Failed to create Invoice Basis." };
+  }
+
+  revalidatePath("/invoice-bases");
+  return { ok: true, sequenceNumber: result.sequenceNumber };
 }

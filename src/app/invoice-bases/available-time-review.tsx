@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AvailableBillableTimeReview } from "@/server/invoice-bases";
+import { useRouter } from "next/navigation";
+import { createInvoiceBasisAction } from "../actions";
 
 function formatDuration(minutes: number): string {
   return `${Math.floor(minutes / 60)}:${(minutes % 60).toString().padStart(2, "0")}`;
@@ -92,6 +94,9 @@ function MemberReviewGroup({
 
 
 export function AvailableTimeReview({ review }: { review: AvailableBillableTimeReview }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [selectedEntryIds, setSelectedEntryIds] = useState(() => new Set(review.availableEntries.map((entry) => entry.id)));
   const [expandedMemberIds, setExpandedMemberIds] = useState<Set<string>>(() => new Set());
   const memberGroups = useMemo(() => {
@@ -111,6 +116,43 @@ export function AvailableTimeReview({ review }: { review: AvailableBillableTimeR
     (total, entry) => total + (selectedEntryIds.has(entry.id) ? 0 : entry.durationMinutes),
     0,
   );
+
+  async function handleCreate() {
+    if (selectedEntries.length === 0) return;
+    setError(null);
+
+    if (excludedEntries > 0) {
+      const message = `This partial selection excludes ${excludedEntries} ${
+        excludedEntries === 1 ? "entry" : "entries"
+      } with a total duration of ${formatDuration(excludedMinutes)}. Are you sure you want to create the Invoice Basis?`;
+      if (!window.confirm(message)) {
+        return;
+      }
+    }
+
+    setPending(true);
+    try {
+      const res = await createInvoiceBasisAction({
+        clientId: review.client.id,
+        startDate: review.startDate,
+        endDate: review.endDate,
+        selectedEntries: selectedEntries.map((e) => ({
+          id: e.id,
+          version: e.version,
+        })),
+      });
+
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setError(res.error ?? "Failed to create Invoice Basis.");
+      }
+    } catch (e) {
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setPending(false);
+    }
+  }
 
   function setEntriesSelected(entryIds: string[], selected: boolean) {
     setSelectedEntryIds((current) => {
@@ -188,10 +230,21 @@ export function AvailableTimeReview({ review }: { review: AvailableBillableTimeR
           </div>
         )}
 
+        {error ? (
+          <p className="mx-6 mb-4 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            {error}
+          </p>
+        ) : null}
+
         <div className="flex items-center justify-between border-t border-slate-100 px-6 py-5">
           <p className="text-sm text-slate-600">At least one selected entry is required to create an Invoice Basis.</p>
-          <button className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300" disabled={selectedEntries.length === 0} type="button">
-            Create Invoice Basis
+          <button
+            className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={selectedEntries.length === 0 || pending}
+            onClick={handleCreate}
+            type="button"
+          >
+            {pending ? "Creating..." : "Create Invoice Basis"}
           </button>
         </div>
       </div>
