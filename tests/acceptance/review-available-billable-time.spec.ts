@@ -46,8 +46,8 @@ test("Administrator reviews grouped Available Billable Time without collapsing d
   await laterCell.fill("1:15");
   await laterCell.press("Enter");
 
-  await page.goto("/invoice-bases");
-  await expect(page).toHaveURL(/\/invoice-bases$/);
+  await page.goto("/invoice-bases?create=true");
+  await expect(page).toHaveURL(/\/invoice-bases/);
   const setup = page.getByRole("form", { name: "Review available billable time" });
   await setup.getByLabel("Client").selectOption({ label: "Review Client" });
   await setup.getByLabel("From date").fill("2099-07-13");
@@ -91,7 +91,7 @@ test("Administrator reviews grouped Available Billable Time without collapsing d
   const client = page.getByRole("article", { name: "Review Client Client" });
   await client.getByRole("button", { name: "Archive" }).click();
   await expect(client).toContainText("Archived");
-  await page.goto("/invoice-bases");
+  await page.goto("/invoice-bases?create=true");
   const archivedSetup = page.getByRole("form", { name: "Review available billable time" });
   await archivedSetup.getByLabel("Client").selectOption({ label: "Review Client (archived)" });
   await archivedSetup.getByLabel("From date").fill("2099-07-13");

@@ -319,6 +319,7 @@ export interface InvoiceBasisHistoryItem {
   createdAt: string;
   createdByDisplayName: string;
   voidedAt: string | null;
+  clientDisplayName?: string;
 }
 
 export async function getInvoiceBasesForClient(
@@ -339,9 +340,11 @@ export async function getInvoiceBasesForClient(
       createdByAccountId: invoiceBasis.createdByAccountId,
       createdByDisplayName: accounts.displayName,
       voidedAt: invoiceBasis.voidedAt,
+      clientDisplayName: clients.displayName,
     })
     .from(invoiceBasis)
     .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
+    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
     .where(eq(invoiceBasis.clientId, clientId))
     .orderBy(desc(invoiceBasis.sequenceNumber));
 
@@ -355,6 +358,45 @@ export async function getInvoiceBasesForClient(
     createdAt: row.createdAt.toISOString(),
     createdByDisplayName: row.createdByDisplayName,
     voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
+    clientDisplayName: row.clientDisplayName,
+  }));
+}
+
+export async function getRecentInvoiceBases(
+  administrator: SessionAccount,
+  limit: number = 20,
+): Promise<InvoiceBasisHistoryItem[] | null> {
+  if (administrator.role !== "administrator") {
+    return null;
+  }
+
+  const rows = await db
+    .select({
+      id: invoiceBasis.id,
+      sequenceNumber: invoiceBasis.sequenceNumber,
+      startDate: invoiceBasis.startDate,
+      endDate: invoiceBasis.endDate,
+      createdAt: invoiceBasis.createdAt,
+      createdByAccountId: invoiceBasis.createdByAccountId,
+      createdByDisplayName: accounts.displayName,
+      voidedAt: invoiceBasis.voidedAt,
+      clientDisplayName: clients.displayName,
+    })
+    .from(invoiceBasis)
+    .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
+    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
+    .orderBy(desc(invoiceBasis.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    id: row.id,
+    sequenceNumber: row.sequenceNumber,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    createdAt: row.createdAt.toISOString(),
+    createdByDisplayName: row.createdByDisplayName,
+    voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
+    clientDisplayName: row.clientDisplayName,
   }));
 }
 
