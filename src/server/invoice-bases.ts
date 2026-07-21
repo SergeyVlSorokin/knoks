@@ -2,6 +2,7 @@ import "server-only";
 import { Temporal } from "@js-temporal/polyfill";
 
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, sum } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import type { SessionAccount } from "@/server/access";
 import { db } from "@/server/db";
@@ -368,6 +369,13 @@ export interface InvoiceBasisItemDetail {
   classification: "billable" | "non_billable";
 }
 
+export interface InvoiceBasisMemberGroup {
+  memberId: string;
+  memberName: string;
+  entries: InvoiceBasisItemDetail[];
+  totalMinutes: number;
+}
+
 export interface InvoiceBasisDetail {
   id: string;
   sequenceNumber: number;
@@ -382,7 +390,7 @@ export interface InvoiceBasisDetail {
   voidedByAccountId: string | null;
   voidedByDisplayName: string | null;
   voidReason: string | null;
-  items: InvoiceBasisItemDetail[];
+  memberGroups: InvoiceBasisMemberGroup[];
 }
 
 export type GetInvoiceBasisResult =
@@ -397,6 +405,9 @@ export async function getInvoiceBasisDetails(
     return { ok: false, reason: "forbidden" };
   }
 
+  const creator = alias(accounts, "creator");
+  const voider = alias(accounts, "voider");
+
   const [basisRow] = await db
     .select({
       id: invoiceBasis.id,
@@ -406,30 +417,21 @@ export async function getInvoiceBasisDetails(
       startDate: invoiceBasis.startDate,
       endDate: invoiceBasis.endDate,
       createdByAccountId: invoiceBasis.createdByAccountId,
-      createdByDisplayName: accounts.displayName,
+      createdByDisplayName: creator.displayName,
       createdAt: invoiceBasis.createdAt,
       voidedAt: invoiceBasis.voidedAt,
       voidedByAccountId: invoiceBasis.voidedByAccountId,
+      voidedByDisplayName: voider.displayName,
       voidReason: invoiceBasis.voidReason,
     })
     .from(invoiceBasis)
     .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
-    .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
+    .innerJoin(creator, eq(creator.id, invoiceBasis.createdByAccountId))
+    .leftJoin(voider, eq(voider.id, invoiceBasis.voidedByAccountId))
     .where(eq(invoiceBasis.id, id));
 
   if (!basisRow) {
     return { ok: false, reason: "not-found" };
-  }
-
-  let voiderDisplayName: string | null = null;
-  if (basisRow.voidedByAccountId) {
-    const [voiderRow] = await db
-      .select({ displayName: accounts.displayName })
-      .from(accounts)
-      .where(eq(accounts.id, basisRow.voidedByAccountId));
-    if (voiderRow) {
-      voiderDisplayName = voiderRow.displayName;
-    }
   }
 
   const items = await db
@@ -447,6 +449,23 @@ export async function getInvoiceBasisDetails(
     .where(eq(invoiceBasisItems.invoiceBasisId, id))
     .orderBy(asc(invoiceBasisItems.accountDisplayName), asc(invoiceBasisItems.workDate), asc(invoiceBasisItems.id));
 
+  // Perform the grouping on the backend/service side
+  const groupedMap = new Map<string, InvoiceBasisMemberGroup>();
+  for (const item of items) {
+    if (!groupedMap.has(item.accountId)) {
+      groupedMap.set(item.accountId, {
+        memberId: item.accountId,
+        memberName: item.accountDisplayName,
+        entries: [],
+        totalMinutes: 0,
+      });
+    }
+    const group = groupedMap.get(item.accountId)!;
+    group.entries.push(item as InvoiceBasisItemDetail);
+    group.totalMinutes += item.durationMinutes;
+  }
+  const memberGroups = Array.from(groupedMap.values());
+
   return {
     ok: true,
     invoiceBasis: {
@@ -461,9 +480,9 @@ export async function getInvoiceBasisDetails(
       createdAt: basisRow.createdAt.toISOString(),
       voidedAt: basisRow.voidedAt ? basisRow.voidedAt.toISOString() : null,
       voidedByAccountId: basisRow.voidedByAccountId,
-      voidedByDisplayName: voiderDisplayName,
+      voidedByDisplayName: basisRow.voidedByDisplayName,
       voidReason: basisRow.voidReason,
-      items: items as InvoiceBasisItemDetail[],
+      memberGroups,
     },
   };
 }

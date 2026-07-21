@@ -105,6 +105,7 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   
   // Individual entry verification
   await expect(compositionSection.getByText("2099-07-13")).toBeVisible();
+  await expect(compositionSection.getByText("Billable").first()).toBeVisible();
   await expect(compositionSection.getByText("Monday inspect description")).toBeVisible();
   await expect(compositionSection.getByText("2099-07-14")).toBeVisible();
   await expect(compositionSection.getByText("Tuesday inspect description")).toBeVisible();
