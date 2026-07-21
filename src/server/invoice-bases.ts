@@ -322,6 +322,8 @@ export interface InvoiceBasisHistoryItem {
   clientDisplayName?: string;
 }
 
+export const DEFAULT_PAGE_LIMIT = 15;
+
 export interface GetInvoiceBasesHistoryResult {
   items: InvoiceBasisHistoryItem[];
   totalCount: number;
@@ -337,13 +339,13 @@ export async function getInvoiceBasesHistory(
 
   const clientId = options.clientId;
   const page = options.page ?? 1;
-  const limit = options.limit ?? 15;
+  const limit = options.limit ?? DEFAULT_PAGE_LIMIT;
   const offset = (page - 1) * limit;
 
   // 1. Get total count
-  let countQuery = db.select({ val: count() }).from(invoiceBasis);
+  let countQuery = db.select({ val: count() }).from(invoiceBasis).$dynamic();
   if (clientId) {
-    countQuery = countQuery.where(eq(invoiceBasis.clientId, clientId)) as any;
+    countQuery = countQuery.where(eq(invoiceBasis.clientId, clientId));
   }
   const [countRes] = await countQuery;
   const totalCount = countRes?.val ?? 0;
@@ -367,10 +369,11 @@ export async function getInvoiceBasesHistory(
     })
     .from(invoiceBasis)
     .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
-    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId));
+    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
+    .$dynamic();
 
   if (clientId) {
-    selectQuery = selectQuery.where(eq(invoiceBasis.clientId, clientId)) as any;
+    selectQuery = selectQuery.where(eq(invoiceBasis.clientId, clientId));
   }
 
   const rows = await selectQuery

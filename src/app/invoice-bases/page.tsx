@@ -1,24 +1,39 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-
+import { Temporal } from "@js-temporal/polyfill";
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { listClients } from "@/server/clients";
-import { getAvailableBillableTimeReview, getInvoiceBasesHistory } from "@/server/invoice-bases";
+import { getAvailableBillableTimeReview, getInvoiceBasesHistory, DEFAULT_PAGE_LIMIT } from "@/server/invoice-bases";
 import { WorkspaceHeader } from "../workspace-header";
 import { AvailableTimeReview } from "./available-time-review";
 
 function formatInstant(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Stockholm",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(date);
+  try {
+    const zonedDateTime = Temporal.Instant.from(value).toZonedDateTimeISO("Europe/Stockholm");
+    const year = zonedDateTime.year;
+    const month = String(zonedDateTime.month).padStart(2, "0");
+    const day = String(zonedDateTime.day).padStart(2, "0");
+    const hour = String(zonedDateTime.hour).padStart(2, "0");
+    const minute = String(zonedDateTime.minute).padStart(2, "0");
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  } catch {
+    return value;
+  }
+}
+
+function buildPageUrl(pageNumber: number, params: { clientId?: string; create?: string; startDate?: string; endDate?: string }): string {
+  const search = new URLSearchParams();
+  if (params.clientId) search.set("clientId", params.clientId);
+  if (params.create) search.set("create", params.create);
+  if (params.startDate) search.set("startDate", params.startDate);
+  if (params.endDate) search.set("endDate", params.endDate);
+  search.set("page", String(pageNumber));
+  return `/invoice-bases?${search.toString()}`;
+}
+
+function getReviewKey(review: any): string {
+  const entriesHash = review.availableEntries.map((e: any) => `${e.id}:${e.version}`).join(",");
+  return `${review.clientId}-${review.startDate}-${review.endDate}-${entriesHash}`;
 }
 
 function reviewError(reason: "client-unavailable" | "invalid-date" | "invalid-range"): string {
@@ -56,7 +71,7 @@ export default async function InvoiceBasesPage({
 
   const pageParam = typeof params.page === "string" ? parseInt(params.page, 10) : 1;
   const currentPage = Number.isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
-  const limit = 15;
+  const limit = DEFAULT_PAGE_LIMIT;
 
   const [clientOptions, result, historyResult] = await Promise.all([
     listClients(account),
@@ -72,6 +87,9 @@ export default async function InvoiceBasesPage({
   const totalPages = Math.ceil(totalCount / limit);
   const startIndex = (currentPage - 1) * limit;
   const endIndex = Math.min(startIndex + historyItems.length, totalCount);
+
+  const displayStart = historyItems.length > 0 ? startIndex + 1 : 0;
+  const displayEnd = endIndex;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -124,7 +142,7 @@ export default async function InvoiceBasesPage({
         {reviewErrorMessage ? <p className="mt-5 rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-800">{reviewErrorMessage}</p> : null}
         {result?.ok ? (
           <AvailableTimeReview
-            key={`${clientId}-${startDate}-${endDate}-${result.review.availableEntries.map((e) => `${e.id}:${e.version}`).join(",")}`}
+            key={getReviewKey(result.review)}
             review={result.review}
           />
         ) : null}
@@ -234,8 +252,8 @@ export default async function InvoiceBasesPage({
                 {totalPages > 1 && (
                   <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
                     <span className="text-sm text-slate-600">
-                      Showing <span className="font-semibold text-slate-900">{startIndex + 1}</span> to{" "}
-                      <span className="font-semibold text-slate-900">{endIndex}</span> of{" "}
+                      Showing <span className="font-semibold text-slate-900">{displayStart}</span> to{" "}
+                      <span className="font-semibold text-slate-900">{displayEnd}</span> of{" "}
                       <span className="font-semibold text-slate-900">{totalCount}</span> bases
                     </span>
                     <div className="flex items-center gap-2">
@@ -243,13 +261,7 @@ export default async function InvoiceBasesPage({
                         className={`rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${
                           currentPage === 1 ? "pointer-events-none opacity-50" : ""
                         }`}
-                        href={`/invoice-bases?${new URLSearchParams({
-                          ...(clientId ? { clientId } : {}),
-                          ...(create ? { create } : {}),
-                          ...(startDate ? { startDate } : {}),
-                          ...(endDate ? { endDate } : {}),
-                          page: String(currentPage - 1),
-                        }).toString()}`}
+                        href={buildPageUrl(currentPage - 1, { clientId, create, startDate, endDate })}
                       >
                         Previous
                       </Link>
@@ -257,13 +269,7 @@ export default async function InvoiceBasesPage({
                         className={`rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 ${
                           currentPage === totalPages ? "pointer-events-none opacity-50" : ""
                         }`}
-                        href={`/invoice-bases?${new URLSearchParams({
-                          ...(clientId ? { clientId } : {}),
-                          ...(create ? { create } : {}),
-                          ...(startDate ? { startDate } : {}),
-                          ...(endDate ? { endDate } : {}),
-                          page: String(currentPage + 1),
-                        }).toString()}`}
+                        href={buildPageUrl(currentPage + 1, { clientId, create, startDate, endDate })}
                       >
                         Next
                       </Link>
