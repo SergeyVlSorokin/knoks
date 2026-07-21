@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { Temporal } from "@js-temporal/polyfill";
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { getInvoiceBasisDetails } from "@/server/invoice-bases";
 import { WorkspaceHeader } from "../../workspace-header";
@@ -14,17 +15,17 @@ function formatDecimalHoursSwedish(minutes: number): string {
 }
 
 function formatInstant(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Stockholm",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(date);
+  try {
+    const zonedDateTime = Temporal.Instant.from(value).toZonedDateTimeISO("Europe/Stockholm");
+    const year = zonedDateTime.year;
+    const month = String(zonedDateTime.month).padStart(2, "0");
+    const day = String(zonedDateTime.day).padStart(2, "0");
+    const hour = String(zonedDateTime.hour).padStart(2, "0");
+    const minute = String(zonedDateTime.minute).padStart(2, "0");
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  } catch {
+    return value;
+  }
 }
 
 export default async function InspectInvoiceBasisPage({
@@ -48,28 +49,8 @@ export default async function InspectInvoiceBasisPage({
 
   const { invoiceBasis } = result;
 
-  // Group items by member
-  const memberGroupsMap = new Map<
-    string,
-    { memberId: string; memberName: string; entries: typeof invoiceBasis.items; totalMinutes: number }
-  >();
-
-  for (const item of invoiceBasis.items) {
-    if (!memberGroupsMap.has(item.accountId)) {
-      memberGroupsMap.set(item.accountId, {
-        memberId: item.accountId,
-        memberName: item.accountDisplayName,
-        entries: [],
-        totalMinutes: 0,
-      });
-    }
-    const group = memberGroupsMap.get(item.accountId)!;
-    group.entries.push(item);
-    group.totalMinutes += item.durationMinutes;
-  }
-
-  const memberGroups = Array.from(memberGroupsMap.values());
-  const grandTotalMinutes = invoiceBasis.items.reduce((sum, item) => sum + item.durationMinutes, 0);
+  const memberGroups = invoiceBasis.memberGroups;
+  const grandTotalMinutes = memberGroups.reduce((sum, group) => sum + group.totalMinutes, 0);
 
   const formattedCreatedAt = formatInstant(invoiceBasis.createdAt);
 
@@ -168,6 +149,7 @@ export default async function InspectInvoiceBasisPage({
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/30 text-xs font-semibold uppercase tracking-wider text-slate-600">
                           <th className="px-5 py-3 w-32">Work Date</th>
+                          <th className="px-5 py-3 w-32">Classification</th>
                           <th className="px-5 py-3">Description</th>
                           <th className="px-5 py-3 w-32 text-right">Duration</th>
                         </tr>
@@ -177,6 +159,9 @@ export default async function InspectInvoiceBasisPage({
                           <tr key={entry.id}>
                             <td className="px-5 py-3.5 font-medium tabular-nums text-slate-900">
                               {entry.workDate}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-700 capitalize">
+                              {entry.classification.replace("_", "-")}
                             </td>
                             <td className="px-5 py-3.5 text-slate-700 whitespace-pre-wrap">
                               {entry.description ?? <span className="italic text-slate-400">No description</span>}
