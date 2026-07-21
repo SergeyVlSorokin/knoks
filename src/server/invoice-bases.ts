@@ -322,55 +322,38 @@ export interface InvoiceBasisHistoryItem {
   clientDisplayName?: string;
 }
 
-export async function getInvoiceBasesForClient(
-  administrator: SessionAccount,
-  clientId: string,
-): Promise<InvoiceBasisHistoryItem[] | null> {
-  if (administrator.role !== "administrator") {
-    return null;
-  }
-
-  const rows = await db
-    .select({
-      id: invoiceBasis.id,
-      sequenceNumber: invoiceBasis.sequenceNumber,
-      startDate: invoiceBasis.startDate,
-      endDate: invoiceBasis.endDate,
-      createdAt: invoiceBasis.createdAt,
-      createdByAccountId: invoiceBasis.createdByAccountId,
-      createdByDisplayName: accounts.displayName,
-      voidedAt: invoiceBasis.voidedAt,
-      clientDisplayName: clients.displayName,
-    })
-    .from(invoiceBasis)
-    .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
-    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
-    .where(eq(invoiceBasis.clientId, clientId))
-    .orderBy(desc(invoiceBasis.sequenceNumber));
-
-  if (rows.length === 0) return [];
-
-  return rows.map((row) => ({
-    id: row.id,
-    sequenceNumber: row.sequenceNumber,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    createdAt: row.createdAt.toISOString(),
-    createdByDisplayName: row.createdByDisplayName,
-    voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
-    clientDisplayName: row.clientDisplayName,
-  }));
+export interface GetInvoiceBasesHistoryResult {
+  items: InvoiceBasisHistoryItem[];
+  totalCount: number;
 }
 
-export async function getRecentInvoiceBases(
+export async function getInvoiceBasesHistory(
   administrator: SessionAccount,
-  limit: number = 20,
-): Promise<InvoiceBasisHistoryItem[] | null> {
+  options: { clientId?: string; page?: number; limit?: number },
+): Promise<GetInvoiceBasesHistoryResult | null> {
   if (administrator.role !== "administrator") {
     return null;
   }
 
-  const rows = await db
+  const clientId = options.clientId;
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 15;
+  const offset = (page - 1) * limit;
+
+  // 1. Get total count
+  let countQuery = db.select({ val: count() }).from(invoiceBasis);
+  if (clientId) {
+    countQuery = countQuery.where(eq(invoiceBasis.clientId, clientId)) as any;
+  }
+  const [countRes] = await countQuery;
+  const totalCount = countRes?.val ?? 0;
+
+  if (totalCount === 0) {
+    return { items: [], totalCount: 0 };
+  }
+
+  // 2. Get paginated items
+  let selectQuery = db
     .select({
       id: invoiceBasis.id,
       sequenceNumber: invoiceBasis.sequenceNumber,
@@ -384,11 +367,18 @@ export async function getRecentInvoiceBases(
     })
     .from(invoiceBasis)
     .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
-    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
-    .orderBy(desc(invoiceBasis.createdAt))
-    .limit(limit);
+    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId));
 
-  return rows.map((row) => ({
+  if (clientId) {
+    selectQuery = selectQuery.where(eq(invoiceBasis.clientId, clientId)) as any;
+  }
+
+  const rows = await selectQuery
+    .orderBy(desc(invoiceBasis.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const items = rows.map((row) => ({
     id: row.id,
     sequenceNumber: row.sequenceNumber,
     startDate: row.startDate,
@@ -398,6 +388,8 @@ export async function getRecentInvoiceBases(
     voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
     clientDisplayName: row.clientDisplayName,
   }));
+
+  return { items, totalCount };
 }
 
 export interface InvoiceBasisItemDetail {
