@@ -77,14 +77,21 @@ test("Member records exact time in the weekly grid and keeps spreadsheet travers
   await invalid.press("Shift+Tab");
   await expect(contosoMonday).toBeFocused();
 
+  // Test saving on blur
+  const northwindWednesday = memberPage.getByLabel("Fast Path Northwind, Wed 2099-07-15");
+  await northwindWednesday.fill("2:15");
+  // Click on the heading to blur the input and trigger save
+  await memberPage.getByRole("heading", { name: "My time" }).click();
+  await expect(northwindWednesday).toHaveText(/2:15.*B/);
+
   await expect(memberPage.getByLabel("Fast Path Northwind week summary")).toHaveText(
-    /2:00.*0:00.*2:00/,
+    /4:15.*0:00.*4:15/,
   );
   await expect(memberPage.getByLabel("Mon 2099-07-13 summary")).toHaveText(
     /2:00.*0:00.*2:00/,
   );
   await expect(memberPage.getByLabel("Whole week summary")).toHaveText(
-    /4:00.*0:00.*4:00/,
+    /6:15.*0:00.*6:15/,
   );
 
   const secondContext = await browser.newContext();

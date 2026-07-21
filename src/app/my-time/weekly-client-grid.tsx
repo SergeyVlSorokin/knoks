@@ -320,11 +320,18 @@ function GridCell({
 }) {
   const [state, action, pending] = useActionState(recordGridTimeEntryAction, initialGridEntryState);
   const focusTarget = useRef<string | null>(null);
+  const isSubmitting = useRef(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
   const cell = row.cells[date.isoDate];
   const label = `${row.displayName}, ${date.weekday} ${date.isoDate}`;
   const target = `${rowIndex}-${dateIndex}`;
   const visibleError = errorDismissed ? undefined : state.error;
+
+  useEffect(() => {
+    if (!pending) {
+      isSubmitting.current = false;
+    }
+  }, [pending]);
 
   useEffect(() => {
     if (state.error) {
@@ -379,6 +386,15 @@ function GridCell({
         defaultValue={state.attemptedInput ?? ""}
         disabled={pending}
         name="duration"
+        onBlur={(event) => {
+          if (isSubmitting.current || pending) return;
+          const value = event.currentTarget.value.trim();
+          if (value === "") return;
+          if (value === (state.attemptedInput ?? "")) return;
+          setErrorDismissed(false);
+          isSubmitting.current = true;
+          event.currentTarget.form?.requestSubmit();
+        }}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== "Tab") return;
           event.preventDefault();
@@ -392,6 +408,7 @@ function GridCell({
             return;
           }
           setErrorDismissed(false);
+          isSubmitting.current = true;
           event.currentTarget.form?.requestSubmit();
         }}
         placeholder="0:00"
