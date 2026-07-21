@@ -11,3 +11,7 @@ The canonical triage roles use their default label strings. See `docs/agents/tri
 ### Domain docs
 
 Domain documentation uses the single-context layout. See `docs/agents/domain.md`.
+
+### Deployment
+
+Deployments and PR submissions follow a specific git and authentication procedure. See `docs/agents/deployment.md`.
