@@ -43,6 +43,13 @@
       "when": 1784499210163,
       "tag": "0005_cute_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784629523021,
+      "tag": "0006_handy_epoch",
+      "breakpoints": true
     }
   ]
 }
