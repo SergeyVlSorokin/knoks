@@ -1,7 +1,7 @@
 import "server-only";
 import { Temporal } from "@js-temporal/polyfill";
 
-import { and, asc, count, eq, gt, gte, inArray, isNull, lt, lte, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, sum } from "drizzle-orm";
 
 import type { SessionAccount } from "@/server/access";
 import { db } from "@/server/db";
@@ -308,4 +308,172 @@ export async function createInvoiceBasis(
     if (isSerializationFailure(error)) return { ok: false, reason: "reload" };
     throw error;
   }
+}
+
+export interface InvoiceBasisHistoryItem {
+  id: string;
+  sequenceNumber: number;
+  startDate: string;
+  endDate: string;
+  createdAt: string;
+  createdByDisplayName: string;
+  voidedAt: string | null;
+}
+
+export async function getInvoiceBasesForClient(
+  administrator: SessionAccount,
+  clientId: string,
+): Promise<InvoiceBasisHistoryItem[] | null> {
+  if (administrator.role !== "administrator") {
+    return null;
+  }
+
+  const rows = await db
+    .select({
+      id: invoiceBasis.id,
+      sequenceNumber: invoiceBasis.sequenceNumber,
+      startDate: invoiceBasis.startDate,
+      endDate: invoiceBasis.endDate,
+      createdAt: invoiceBasis.createdAt,
+      createdByAccountId: invoiceBasis.createdByAccountId,
+      voidedAt: invoiceBasis.voidedAt,
+    })
+    .from(invoiceBasis)
+    .where(eq(invoiceBasis.clientId, clientId))
+    .orderBy(desc(invoiceBasis.sequenceNumber));
+
+  if (rows.length === 0) return [];
+
+  // Fetch all accounts to map creator names
+  const allAccounts = await db
+    .select({ id: accounts.id, displayName: accounts.displayName })
+    .from(accounts);
+  const accountMap = new Map(allAccounts.map((a) => [a.id, a.displayName]));
+
+  return rows.map((row) => ({
+    id: row.id,
+    sequenceNumber: row.sequenceNumber,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    createdAt: row.createdAt.toISOString(),
+    createdByDisplayName: accountMap.get(row.createdByAccountId) ?? "Unknown",
+    voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
+  }));
+}
+
+export interface InvoiceBasisItemDetail {
+  id: string;
+  timeEntryId: string;
+  accountId: string;
+  accountDisplayName: string;
+  workDate: string;
+  durationMinutes: number;
+  description: string | null;
+  classification: "billable" | "non_billable";
+}
+
+export interface InvoiceBasisDetail {
+  id: string;
+  sequenceNumber: number;
+  clientId: string;
+  clientDisplayName: string;
+  startDate: string;
+  endDate: string;
+  createdByAccountId: string;
+  createdByDisplayName: string;
+  createdAt: string;
+  voidedAt: string | null;
+  voidedByAccountId: string | null;
+  voidedByDisplayName: string | null;
+  voidReason: string | null;
+  items: InvoiceBasisItemDetail[];
+}
+
+export type GetInvoiceBasisResult =
+  | { ok: true; invoiceBasis: InvoiceBasisDetail }
+  | { ok: false; reason: "forbidden" | "not-found" };
+
+export async function getInvoiceBasisDetails(
+  administrator: SessionAccount,
+  id: string,
+): Promise<GetInvoiceBasisResult> {
+  if (administrator.role !== "administrator") {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const [basisRow] = await db
+    .select({
+      id: invoiceBasis.id,
+      sequenceNumber: invoiceBasis.sequenceNumber,
+      clientId: invoiceBasis.clientId,
+      startDate: invoiceBasis.startDate,
+      endDate: invoiceBasis.endDate,
+      createdByAccountId: invoiceBasis.createdByAccountId,
+      createdAt: invoiceBasis.createdAt,
+      voidedAt: invoiceBasis.voidedAt,
+      voidedByAccountId: invoiceBasis.voidedByAccountId,
+      voidReason: invoiceBasis.voidReason,
+    })
+    .from(invoiceBasis)
+    .where(eq(invoiceBasis.id, id));
+
+  if (!basisRow) {
+    return { ok: false, reason: "not-found" };
+  }
+
+  const [clientRow] = await db
+    .select({ displayName: clients.displayName })
+    .from(clients)
+    .where(eq(clients.id, basisRow.clientId));
+
+  const [creatorRow] = await db
+    .select({ displayName: accounts.displayName })
+    .from(accounts)
+    .where(eq(accounts.id, basisRow.createdByAccountId));
+
+  let voiderDisplayName: string | null = null;
+  if (basisRow.voidedByAccountId) {
+    const [voiderRow] = await db
+      .select({ displayName: accounts.displayName })
+      .from(accounts)
+      .where(eq(accounts.id, basisRow.voidedByAccountId));
+    if (voiderRow) {
+      voiderDisplayName = voiderRow.displayName;
+    }
+  }
+
+  const items = await db
+    .select({
+      id: invoiceBasisItems.id,
+      timeEntryId: invoiceBasisItems.timeEntryId,
+      accountId: invoiceBasisItems.accountId,
+      accountDisplayName: invoiceBasisItems.accountDisplayName,
+      workDate: invoiceBasisItems.workDate,
+      durationMinutes: invoiceBasisItems.durationMinutes,
+      description: invoiceBasisItems.description,
+      classification: invoiceBasisItems.classification,
+    })
+    .from(invoiceBasisItems)
+    .where(eq(invoiceBasisItems.invoiceBasisId, id))
+    .orderBy(asc(invoiceBasisItems.accountDisplayName), asc(invoiceBasisItems.workDate), asc(invoiceBasisItems.id));
+
+  return {
+    ok: true,
+    invoiceBasis: {
+      id: basisRow.id,
+      sequenceNumber: basisRow.sequenceNumber,
+      clientId: basisRow.clientId,
+      clientDisplayName: clientRow?.displayName ?? "Unknown Client",
+      startDate: basisRow.startDate,
+      endDate: basisRow.endDate,
+      createdByAccountId: basisRow.createdByAccountId,
+      createdByDisplayName: creatorRow?.displayName ?? "Unknown Creator",
+      createdAt: basisRow.createdAt.toISOString(),
+      voidedAt: basisRow.voidedAt ? basisRow.voidedAt.toISOString() : null,
+      voidedByAccountId: basisRow.voidedByAccountId,
+      voidedByDisplayName: voiderDisplayName,
+      voidReason: basisRow.voidReason,
+      items: items as InvoiceBasisItemDetail[],
+    },
+  };
 }

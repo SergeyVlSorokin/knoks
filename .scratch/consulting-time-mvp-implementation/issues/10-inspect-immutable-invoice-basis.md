@@ -4,12 +4,12 @@
 
 **Blocked by:** 09 — Commit an Invoice Basis atomically.
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] The Invoice Basis preserves Client identity, inclusive date range, creator, creation time, sequence number, and original Time Entry composition.
-- [ ] Every composition item preserves Time Entry identity, work date, Member attribution, description, classification, and exact whole-minute duration.
-- [ ] The displayed Client name follows the Client's current name after a rename while the Client identity remains unchanged.
-- [ ] Entries are grouped by Member and then work date with exact-minute Member subtotals and a grand total.
-- [ ] Each subtotal and grand total displays authoritative hours-and-minutes plus an independently derived decimal-hour value rounded half-up to two places with a Swedish decimal comma.
-- [ ] Invoice Basis history is available per Client without introducing external-invoice, sent, paid, approval, or reporting states.
-- [ ] Included Billable Time cannot be edited or deleted by either its Member or an Administrator while the Invoice Basis is active.
+- [x] The Invoice Basis preserves Client identity, inclusive date range, creator, creation time, sequence number, and original Time Entry composition.
+- [x] Every composition item preserves Time Entry identity, work date, Member attribution, description, classification, and exact whole-minute duration.
+- [x] The displayed Client name follows the Client's current name after a rename while the Client identity remains unchanged.
+- [x] Entries are grouped by Member and then work date with exact-minute Member subtotals and a grand total.
+- [x] Each subtotal and grand total displays authoritative hours-and-minutes plus an independently derived decimal-hour value rounded half-up to two places with a Swedish decimal comma.
+- [x] Invoice Basis history is available per Client without introducing external-invoice, sent, paid, approval, or reporting states.
+- [x] Included Billable Time cannot be edited or deleted by either its Member or an Administrator while the Invoice Basis is active.
