@@ -336,19 +336,15 @@ export async function getInvoiceBasesForClient(
       endDate: invoiceBasis.endDate,
       createdAt: invoiceBasis.createdAt,
       createdByAccountId: invoiceBasis.createdByAccountId,
+      createdByDisplayName: accounts.displayName,
       voidedAt: invoiceBasis.voidedAt,
     })
     .from(invoiceBasis)
+    .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
     .where(eq(invoiceBasis.clientId, clientId))
     .orderBy(desc(invoiceBasis.sequenceNumber));
 
   if (rows.length === 0) return [];
-
-  // Fetch all accounts to map creator names
-  const allAccounts = await db
-    .select({ id: accounts.id, displayName: accounts.displayName })
-    .from(accounts);
-  const accountMap = new Map(allAccounts.map((a) => [a.id, a.displayName]));
 
   return rows.map((row) => ({
     id: row.id,
@@ -356,7 +352,7 @@ export async function getInvoiceBasesForClient(
     startDate: row.startDate,
     endDate: row.endDate,
     createdAt: row.createdAt.toISOString(),
-    createdByDisplayName: accountMap.get(row.createdByAccountId) ?? "Unknown",
+    createdByDisplayName: row.createdByDisplayName,
     voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null,
   }));
 }
@@ -406,30 +402,24 @@ export async function getInvoiceBasisDetails(
       id: invoiceBasis.id,
       sequenceNumber: invoiceBasis.sequenceNumber,
       clientId: invoiceBasis.clientId,
+      clientDisplayName: clients.displayName,
       startDate: invoiceBasis.startDate,
       endDate: invoiceBasis.endDate,
       createdByAccountId: invoiceBasis.createdByAccountId,
+      createdByDisplayName: accounts.displayName,
       createdAt: invoiceBasis.createdAt,
       voidedAt: invoiceBasis.voidedAt,
       voidedByAccountId: invoiceBasis.voidedByAccountId,
       voidReason: invoiceBasis.voidReason,
     })
     .from(invoiceBasis)
+    .innerJoin(clients, eq(clients.id, invoiceBasis.clientId))
+    .innerJoin(accounts, eq(accounts.id, invoiceBasis.createdByAccountId))
     .where(eq(invoiceBasis.id, id));
 
   if (!basisRow) {
     return { ok: false, reason: "not-found" };
   }
-
-  const [clientRow] = await db
-    .select({ displayName: clients.displayName })
-    .from(clients)
-    .where(eq(clients.id, basisRow.clientId));
-
-  const [creatorRow] = await db
-    .select({ displayName: accounts.displayName })
-    .from(accounts)
-    .where(eq(accounts.id, basisRow.createdByAccountId));
 
   let voiderDisplayName: string | null = null;
   if (basisRow.voidedByAccountId) {
@@ -463,11 +453,11 @@ export async function getInvoiceBasisDetails(
       id: basisRow.id,
       sequenceNumber: basisRow.sequenceNumber,
       clientId: basisRow.clientId,
-      clientDisplayName: clientRow?.displayName ?? "Unknown Client",
+      clientDisplayName: basisRow.clientDisplayName,
       startDate: basisRow.startDate,
       endDate: basisRow.endDate,
       createdByAccountId: basisRow.createdByAccountId,
-      createdByDisplayName: creatorRow?.displayName ?? "Unknown Creator",
+      createdByDisplayName: basisRow.createdByDisplayName,
       createdAt: basisRow.createdAt.toISOString(),
       voidedAt: basisRow.voidedAt ? basisRow.voidedAt.toISOString() : null,
       voidedByAccountId: basisRow.voidedByAccountId,

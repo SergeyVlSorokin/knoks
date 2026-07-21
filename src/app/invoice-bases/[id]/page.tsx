@@ -13,6 +13,20 @@ function formatDecimalHoursSwedish(minutes: number): string {
   return rounded.toFixed(2).replace(".", ",");
 }
 
+function formatInstant(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
 export default async function InspectInvoiceBasisPage({
   params,
 }: {
@@ -37,12 +51,13 @@ export default async function InspectInvoiceBasisPage({
   // Group items by member
   const memberGroupsMap = new Map<
     string,
-    { memberName: string; entries: typeof invoiceBasis.items; totalMinutes: number }
+    { memberId: string; memberName: string; entries: typeof invoiceBasis.items; totalMinutes: number }
   >();
 
   for (const item of invoiceBasis.items) {
     if (!memberGroupsMap.has(item.accountId)) {
       memberGroupsMap.set(item.accountId, {
+        memberId: item.accountId,
         memberName: item.accountDisplayName,
         entries: [],
         totalMinutes: 0,
@@ -56,10 +71,7 @@ export default async function InspectInvoiceBasisPage({
   const memberGroups = Array.from(memberGroupsMap.values());
   const grandTotalMinutes = invoiceBasis.items.reduce((sum, item) => sum + item.durationMinutes, 0);
 
-  const formattedCreatedAt = new Date(invoiceBasis.createdAt)
-    .toISOString()
-    .slice(0, 16)
-    .replace("T", " ");
+  const formattedCreatedAt = formatInstant(invoiceBasis.createdAt);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -117,7 +129,7 @@ export default async function InspectInvoiceBasisPage({
               <div className="mt-6 rounded-md bg-slate-50 border border-slate-200 p-4">
                 <p className="text-sm text-slate-700">
                   <span className="font-semibold text-slate-950">Voided:</span>{" "}
-                  {new Date(invoiceBasis.voidedAt).toISOString().slice(0, 16).replace("T", " ")} by{" "}
+                  {formatInstant(invoiceBasis.voidedAt)} by{" "}
                   {invoiceBasis.voidedByDisplayName ?? "Unknown"}
                 </p>
                 {invoiceBasis.voidReason ? (
@@ -141,7 +153,7 @@ export default async function InspectInvoiceBasisPage({
                 <section
                   aria-label={`${group.memberName} composition`}
                   className="rounded-lg border border-slate-200 bg-white"
-                  key={group.memberName}
+                  key={group.memberId}
                 >
                   <div className="border-b border-slate-200 bg-slate-50/50 px-5 py-4 flex items-center justify-between">
                     <h3 className="font-semibold text-slate-950">{group.memberName}</h3>

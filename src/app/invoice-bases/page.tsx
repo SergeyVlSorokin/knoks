@@ -7,6 +7,20 @@ import { getAvailableBillableTimeReview, getInvoiceBasesForClient } from "@/serv
 import { WorkspaceHeader } from "../workspace-header";
 import { AvailableTimeReview } from "./available-time-review";
 
+function formatInstant(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
 function reviewError(reason: "client-unavailable" | "invalid-date" | "invalid-range"): string {
   switch (reason) {
     case "client-unavailable":
@@ -102,10 +116,15 @@ export default async function InvoiceBasesPage({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {invoiceBasesHistory.map((basis) => (
+                     {invoiceBasesHistory.map((basis) => (
                       <tr key={basis.id}>
-                        <td className="py-3.5 pr-4 font-semibold text-slate-950">
+                        <td className="py-3.5 pr-4 font-semibold text-slate-950 flex items-center gap-2">
                           #{basis.sequenceNumber}
+                          {basis.voidedAt ? (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
+                              voided
+                            </span>
+                          ) : null}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700">
                           {basis.startDate} to {basis.endDate}
@@ -114,7 +133,7 @@ export default async function InvoiceBasesPage({
                           {basis.createdByDisplayName}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700">
-                          {new Date(basis.createdAt).toISOString().slice(0, 16).replace("T", " ")}
+                          {formatInstant(basis.createdAt)}
                         </td>
                         <td className="py-3.5 pl-4 text-right">
                           <Link
