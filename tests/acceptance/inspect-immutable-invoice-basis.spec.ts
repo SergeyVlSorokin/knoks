@@ -51,8 +51,8 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   await memberPage.goto("/my-time?week=2099-07-13"); // Wait/persist
 
   // 3. Administrator reviews Available Billable Time and creates Invoice Basis
-  await page.goto("/invoice-bases");
-  await expect(page).toHaveURL(/\/invoice-bases$/);
+  await page.goto("/invoice-bases?create=true");
+  await expect(page).toHaveURL(/\/invoice-bases/);
   const setup = page.getByRole("form", { name: "Review available billable time" });
   await setup.getByLabel("Client").selectOption({ label: "Inspect Client" });
   await setup.getByLabel("From date").fill("2099-07-13");
@@ -68,7 +68,7 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   await page.waitForLoadState("networkidle");
 
   // 4. Verify history lists the Invoice Basis per Client
-  await page.goto("/invoice-bases");
+  await page.goto("/invoice-bases?create=true");
   const historySetup = page.getByRole("form", { name: "Review available billable time" });
   await historySetup.getByLabel("Client").selectOption({ label: "Inspect Client" });
   await historySetup.getByLabel("From date").fill("2099-07-13");
@@ -126,7 +126,7 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   // Go back to the inspection page by extracting the ID from URL
   const path = page.url(); // currently on /administration
   // Let's go to /invoice-bases first, then click inspect
-  await page.goto("/invoice-bases");
+  await page.goto("/invoice-bases?create=true");
   const renameHistorySetup = page.getByRole("form", { name: "Review available billable time" });
   await renameHistorySetup.getByLabel("Client").selectOption({ label: "Renamed Inspect Client" });
   await renameHistorySetup.getByLabel("From date").fill("2099-07-13");

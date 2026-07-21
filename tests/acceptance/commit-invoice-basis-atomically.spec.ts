@@ -36,8 +36,8 @@ test("Administrator commits an Invoice Basis atomically, handles partial selecti
   await expect(grid.getByRole("button", { name: /Invoice Client, Tue 2099-07-14/ })).toBeVisible();
 
   // 3. Administrator page 1 reviews Available Billable Time
-  await page.goto("/invoice-bases");
-  await expect(page).toHaveURL(/\/invoice-bases$/);
+  await page.goto("/invoice-bases?create=true");
+  await expect(page).toHaveURL(/\/invoice-bases/);
   const setup1 = page.getByRole("form", { name: "Review available billable time" });
   await setup1.getByLabel("Client").selectOption({ label: "Invoice Client" });
   await setup1.getByLabel("From date").fill("2099-07-13");
@@ -90,7 +90,7 @@ test("Administrator commits an Invoice Basis atomically, handles partial selecti
   const admin2Page = await admin2Context.newPage();
   await signIn(admin2Page, "ada", "correct horse battery staple");
   await expect(admin2Page).toHaveURL(/\/administration$/, { timeout: 15_000 });
-  await admin2Page.goto("/invoice-bases");
+  await admin2Page.goto("/invoice-bases?create=true");
   const setup2 = admin2Page.getByRole("form", { name: "Review available billable time" });
   await setup2.getByLabel("Client").selectOption({ label: "Invoice Client" });
   await setup2.getByLabel("From date").fill("2099-07-13");
