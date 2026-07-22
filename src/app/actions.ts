@@ -754,7 +754,7 @@ export async function voidInvoiceBasisAction(
       return { error: "Only Administrators can void Invoice Bases." };
     }
     if (result.reason === "already-voided") {
-      return { error: "This Invoice Basis has already been voided." };
+      return { error: "This Invoice Basis has already been voided. Reload to see the updated state." };
     }
     if (result.reason === "blank-reason") {
       return { error: "Enter a short reason for voiding." };
