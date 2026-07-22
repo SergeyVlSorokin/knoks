@@ -29,7 +29,7 @@ import {
   removeStandingClientRow,
   updateTimeEntry,
 } from "@/server/time";
-import { createInvoiceBasis } from "@/server/invoice-bases";
+import { createInvoiceBasis, voidInvoiceBasis } from "@/server/invoice-bases";
 import type { TimeEntryMutationResult } from "@/server/time";
 import type { SignInState } from "./sign-in/state";
 import type {
@@ -725,3 +725,48 @@ export async function createInvoiceBasisAction(input: {
   revalidatePath("/invoice-bases");
   return { ok: true, sequenceNumber: result.sequenceNumber };
 }
+
+const voidInvoiceBasisSchema = z.object({
+  invoiceBasisId: z.string().uuid(),
+  voidReason: z.string().trim().min(1, "Enter a short reason for voiding."),
+});
+
+export async function voidInvoiceBasisAction(
+  _previousState: { error?: string; success?: boolean } | null,
+  formData: FormData,
+) {
+  const administrator = await currentSessionAccount();
+  if (!administrator) {
+    redirect("/sign-in");
+  }
+
+  const parsed = voidInvoiceBasisSchema.safeParse({
+    invoiceBasisId: formData.get("invoiceBasisId"),
+    voidReason: formData.get("voidReason"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Complete the reason field." };
+  }
+
+  const result = await voidInvoiceBasis(administrator, parsed.data);
+  if (!result.ok) {
+    if (result.reason === "forbidden") {
+      return { error: "Only Administrators can void Invoice Bases." };
+    }
+    if (result.reason === "already-voided") {
+      return { error: "This Invoice Basis has already been voided." };
+    }
+    if (result.reason === "blank-reason") {
+      return { error: "Enter a short reason for voiding." };
+    }
+    if (result.reason === "reload") {
+      return { error: "The Invoice Basis changed concurrently. Reload and try again." };
+    }
+    return { error: "Failed to void Invoice Basis." };
+  }
+
+  revalidatePath("/invoice-bases");
+  revalidatePath(`/invoice-bases/${parsed.data.invoiceBasisId}`);
+  return { success: true };
+}
+
