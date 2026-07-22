@@ -523,3 +523,79 @@ export async function getInvoiceBasisDetails(
     },
   };
 }
+
+export interface VoidInvoiceBasisInput {
+  invoiceBasisId: string;
+  voidReason: string;
+}
+
+export type VoidInvoiceBasisResult =
+  | { ok: true }
+  | { ok: false; reason: "forbidden" | "not-found" | "already-voided" | "blank-reason" | "reload" };
+
+export async function voidInvoiceBasis(
+  administrator: SessionAccount,
+  input: VoidInvoiceBasisInput,
+): Promise<VoidInvoiceBasisResult> {
+  if (administrator.role !== "administrator") {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const voidReason = input.voidReason.trim();
+  if (voidReason.length === 0) {
+    return { ok: false, reason: "blank-reason" };
+  }
+
+  try {
+    return await db.transaction(
+      async (transaction) => {
+        const [actor] = await transaction
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.id, administrator.accountId), eq(accounts.active, true)));
+        if (!actor) return { ok: false, reason: "forbidden" } as const;
+
+        const [basis] = await transaction
+          .select({
+            id: invoiceBasis.id,
+            voidedAt: invoiceBasis.voidedAt,
+          })
+          .from(invoiceBasis)
+          .where(eq(invoiceBasis.id, input.invoiceBasisId))
+          .for("update");
+
+        if (!basis) {
+          return { ok: false, reason: "not-found" } as const;
+        }
+
+        if (basis.voidedAt !== null) {
+          return { ok: false, reason: "already-voided" } as const;
+        }
+
+        await transaction
+          .update(invoiceBasis)
+          .set({
+            voidedAt: new Date(),
+            voidedByAccountId: actor.id,
+            voidReason,
+          })
+          .where(eq(invoiceBasis.id, input.invoiceBasisId));
+
+        await transaction
+          .update(timeEntries)
+          .set({
+            includedInvoiceBasisId: null,
+            version: sql`${timeEntries.version} + 1`,
+          })
+          .where(eq(timeEntries.includedInvoiceBasisId, input.invoiceBasisId));
+
+        return { ok: true } as const;
+      },
+      { isolationLevel: "serializable" },
+    );
+  } catch (error) {
+    if (isSerializationFailure(error)) return { ok: false, reason: "reload" };
+    throw error;
+  }
+}
+

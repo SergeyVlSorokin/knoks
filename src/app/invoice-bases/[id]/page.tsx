@@ -4,6 +4,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { currentSessionAccount } from "@/server/access/session-cookie";
 import { getInvoiceBasisDetails } from "@/server/invoice-bases";
 import { WorkspaceHeader } from "../../workspace-header";
+import { VoidForm } from "./void-form";
 
 function formatDuration(minutes: number): string {
   return `${Math.floor(minutes / 60)}:${(minutes % 60).toString().padStart(2, "0")}`;
@@ -195,6 +196,10 @@ export default async function InspectInvoiceBasisPage({
               </div>
             </div>
           </div>
+
+          {!invoiceBasis.voidedAt ? (
+            <VoidForm invoiceBasisId={invoiceBasis.id} />
+          ) : null}
         </div>
       </main>
     </div>
