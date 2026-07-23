@@ -71,3 +71,34 @@ test("Member navigates a Swedish-local week and keeps private standing Client ro
   await expect(secondMemberPage.getByRole("grid", { name: "Weekly time" }).getByRole("row")).toHaveCount(2);
   await secondMemberContext.close();
 });
+
+test("Member cannot remove a standing Client row that contains weekly Time Entries", async ({
+  browser,
+  page,
+}) => {
+  const memberPassword = await createMemberAndClients(
+    page,
+    { displayName: "Standing Row Time Member", username: "standing-row-time-member" },
+    ["Northwind"],
+  );
+
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await signIn(memberPage, "standing-row-time-member", memberPassword);
+  await expect(memberPage).toHaveURL(/\/my-time$/, { timeout: 15_000 });
+  await memberPage.goto("/my-time?week=2099-07-13");
+
+  const grid = memberPage.getByRole("grid", { name: "Weekly time" });
+  await memberPage.getByLabel("Add a standing Client row").selectOption({ label: "Northwind" });
+  await memberPage.getByRole("button", { name: "Add row" }).click();
+
+  const row = grid.getByRole("row", { name: /Northwind/ });
+  await expect(row.getByRole("button", { name: "Remove row" })).toBeVisible();
+  const monday = memberPage.getByLabel("Northwind, Mon 2099-07-13");
+  await monday.fill("1:00");
+  await monday.press("Enter");
+
+  await expect(monday).toHaveText(/1:00.*B/);
+  await expect(row.getByRole("button", { name: "Remove row" })).toBeHidden();
+  await memberContext.close();
+});
