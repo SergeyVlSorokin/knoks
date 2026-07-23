@@ -84,6 +84,8 @@ test("Member opens a constituent cell, corrects entries, and sees accountable hi
 
   await staleEntry.locator("form").first().evaluate((form) => (form as HTMLFormElement).requestSubmit());
   await expect(staleDialog).toContainText("Time changed concurrently. Reload and try again.");
+  await staleEntry.locator("form").nth(1).evaluate((form) => (form as HTMLFormElement).requestSubmit());
+  await expect(staleDialog).toContainText("Time changed concurrently. Reload and try again.");
 
   await page.goto("/administration");
   const memberAccount = page.getByRole("article", { name: "Correction Member account" });
