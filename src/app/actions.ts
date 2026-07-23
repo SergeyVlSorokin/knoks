@@ -229,7 +229,9 @@ export async function resetAccountPasswordAction(
       error:
         result.reason === "forbidden"
           ? "Only Administrators can reset another account's password."
-          : "Only active accounts can receive a new password.",
+          : result.reason === "reload"
+            ? "The account changed. Reload and try again."
+            : "Only active accounts can receive a new password.",
     };
   }
 
@@ -237,7 +239,11 @@ export async function resetAccountPasswordAction(
 }
 
 function accountAccessError(
-  reason: "forbidden" | "account-unavailable" | "last-administrator",
+  reason:
+    | "forbidden"
+    | "account-unavailable"
+    | "last-administrator"
+    | "reload",
 ): string {
   switch (reason) {
     case "forbidden":
@@ -246,6 +252,8 @@ function accountAccessError(
       return "The last active Administrator cannot be demoted or deactivated.";
     case "account-unavailable":
       return "Only active accounts can be managed.";
+    case "reload":
+      return "The account changed. Reload and try again.";
   }
 }
 
