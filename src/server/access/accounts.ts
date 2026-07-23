@@ -26,27 +26,35 @@ export type ChangePasswordResult =
 
 export type ResetAccountPasswordResult =
   | { ok: true; password: string }
-  | { ok: false; reason: "forbidden" | "account-unavailable" };
+  | { ok: false; reason: "forbidden" | "account-unavailable" | "reload" };
 
 export type ManageAccountAccessResult =
   | { ok: true }
   | {
       ok: false;
-      reason: "forbidden" | "account-unavailable" | "last-administrator";
+      reason:
+        | "forbidden"
+        | "account-unavailable"
+        | "last-administrator"
+        | "reload";
     };
 
-function isUniqueViolation(error: unknown): boolean {
+function databaseErrorCode(error: unknown): string | undefined {
   let current = error;
   while (typeof current === "object" && current !== null) {
-    if ("code" in current && current.code === "23505") {
-      return true;
+    if ("code" in current && typeof current.code === "string") {
+      return current.code;
     }
     if (!("cause" in current)) {
-      return false;
+      return undefined;
     }
     current = current.cause;
   }
-  return false;
+  return undefined;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return databaseErrorCode(error) === "23505";
 }
 
 export async function listAccounts(
@@ -139,34 +147,44 @@ async function manageAccountAccess(
     return { ok: false, reason: "forbidden" };
   }
 
-  return db.transaction(async (transaction) => {
-    const activeAdministrators = await transaction
-      .select({ id: accounts.id })
-      .from(accounts)
-      .where(and(eq(accounts.active, true), eq(accounts.role, "administrator")))
-      .for("update");
-    if (!activeAdministrators.some(({ id }) => id === administrator.accountId)) {
-      return { ok: false, reason: "forbidden" } as const;
-    }
+  try {
+    return await db.transaction(
+      async (transaction) => {
+        const activeAdministrators = await transaction
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(and(eq(accounts.active, true), eq(accounts.role, "administrator")))
+          .for("update");
+        if (!activeAdministrators.some(({ id }) => id === administrator.accountId)) {
+          return { ok: false, reason: "forbidden" } as const;
+        }
 
-    const target = await transaction.query.accounts.findFirst({
-      where: and(eq(accounts.id, accountId), eq(accounts.active, true)),
-      columns: { role: true },
-    });
-    if (!target) {
-      return { ok: false, reason: "account-unavailable" } as const;
-    }
-    if (
-      removesAdministratorAccess &&
-      target.role === "administrator" &&
-      activeAdministrators.length === 1
-    ) {
-      return { ok: false, reason: "last-administrator" } as const;
-    }
+        const target = await transaction.query.accounts.findFirst({
+          where: and(eq(accounts.id, accountId), eq(accounts.active, true)),
+          columns: { role: true },
+        });
+        if (!target) {
+          return { ok: false, reason: "account-unavailable" } as const;
+        }
+        if (
+          removesAdministratorAccess &&
+          target.role === "administrator" &&
+          activeAdministrators.length === 1
+        ) {
+          return { ok: false, reason: "last-administrator" } as const;
+        }
 
-    await apply(transaction);
-    return { ok: true } as const;
-  });
+        await apply(transaction);
+        return { ok: true } as const;
+      },
+      { isolationLevel: "serializable" },
+    );
+  } catch (error) {
+    if (databaseErrorCode(error) === "40001") {
+      return { ok: false, reason: "reload" };
+    }
+    throw error;
+  }
 }
 
 export async function resetAccountPassword(
@@ -194,7 +212,9 @@ export async function resetAccountPassword(
       reason:
         result.reason === "account-unavailable"
           ? "account-unavailable"
-          : "forbidden",
+          : result.reason === "reload"
+            ? "reload"
+            : "forbidden",
     };
   }
   return { ok: true, password };
