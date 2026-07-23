@@ -48,6 +48,19 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   const tuesdayDialog = memberPage.getByRole("dialog", { name: "Inspect Client, Tue 2099-07-14 Time Entries" });
   await tuesdayDialog.locator("form").first().locator('textarea[name="description"]').fill("Tuesday inspect description");
   await tuesdayDialog.locator("form").first().evaluate((form) => (form as HTMLFormElement).requestSubmit());
+  await memberPage.goto("/my-time?week=2099-07-13");
+  await memberPage.getByRole("button", { name: /Inspect Client, Tue 2099-07-14/ }).click();
+  const roundingDialog = memberPage.getByRole("dialog", {
+    name: "Inspect Client, Tue 2099-07-14 Time Entries",
+  });
+  await roundingDialog.getByLabel("New entry duration").fill("0:01");
+  await roundingDialog
+    .locator("form")
+    .last()
+    .evaluate((form) => (form as HTMLFormElement).requestSubmit());
+  await expect(
+    memberPage.getByRole("button", { name: /Inspect Client, Tue 2099-07-14/ }),
+  ).toHaveText(/1:31.*B/);
   await memberPage.goto("/my-time?week=2099-07-13"); // Wait/persist
 
   // 3. Administrator reviews Available Billable Time and creates Invoice Basis
@@ -61,7 +74,7 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   await page.waitForLoadState("networkidle");
 
   const review = page.getByRole("region", { name: "Available Billable Time review" });
-  await expect(review).toContainText("2 selected · 2:30");
+  await expect(review).toContainText("3 selected · 2:31");
 
   const createBtn = review.getByRole("button", { name: "Create Invoice Basis" });
   await createBtn.click();
@@ -99,20 +112,19 @@ test("Administrator inspects an immutable Invoice Basis with subtotals, grand to
   const compositionSection = page.getByRole("region", { name: "Inspect Member composition" });
   await expect(compositionSection.getByRole("heading", { name: "Inspect Member" })).toBeVisible();
   
-  // Subtotal check (Swedish decimal rounding)
-  // 150 minutes = 2.5 hours. Indepedently rounded half-up: 2,50 h
-  await expect(compositionSection.getByText("Subtotal: 2:30 (2,50 h)")).toBeVisible();
+  // 151 minutes = 2.516... hours. Half-up two-decimal rounding yields 2,52 h.
+  await expect(compositionSection.getByText("Subtotal: 2:31 (2,52 h)")).toBeVisible();
   
   // Individual entry verification
   await expect(compositionSection.getByText("2099-07-13")).toBeVisible();
   await expect(compositionSection.getByText("Billable").first()).toBeVisible();
   await expect(compositionSection.getByText("Monday inspect description")).toBeVisible();
-  await expect(compositionSection.getByText("2099-07-14")).toBeVisible();
+  await expect(compositionSection.getByText("2099-07-14").first()).toBeVisible();
   await expect(compositionSection.getByText("Tuesday inspect description")).toBeVisible();
 
   // Grand totals verification
-  await expect(page.getByText("Authoritative Total").locator("xpath=../span").last()).toHaveText("2:30");
-  await expect(page.getByText("Decimal Total").locator("xpath=../span").last()).toHaveText("2,50 h");
+  await expect(page.getByText("Authoritative Total").locator("xpath=../span").last()).toHaveText("2:31");
+  await expect(page.getByText("Decimal Total").locator("xpath=../span").last()).toHaveText("2,52 h");
 
   // 6. Test Client Rename displays current Client name while keeping ID same
   await page.goto("/administration");
